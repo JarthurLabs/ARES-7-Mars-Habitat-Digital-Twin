@@ -1,0 +1,126 @@
+[
+  {
+    "@id": "dtmi:ares7:Habitat;1",
+    "@type": "Interface",
+    "@context": "dtmi:dtdl:context;2",
+    "displayName": "ARES-7 Habitat",
+    "description": "Mission-level state for the ARES-7 surface habitat.",
+    "contents": [
+      { "@type": "Property", "name": "operationalState", "schema": "string", "writable": true },
+      { "@type": "Property", "name": "scenarioRunId", "schema": "string", "writable": true },
+      { "@type": "Property", "name": "lastProcessedTick", "schema": "integer", "writable": true },
+      { "@type": "Property", "name": "simulatedMinute", "schema": "integer", "writable": true },
+      { "@type": "Property", "name": "alarmLevel", "schema": "string", "writable": true },
+      { "@type": "Property", "name": "activeIncident", "schema": "string", "writable": true },
+      { "@type": "Property", "name": "controllerAction", "schema": "string", "writable": true },
+      { "@type": "Property", "name": "operatorDecision", "schema": "string", "writable": true },
+      { "@type": "Property", "name": "recoveryStableTicks", "schema": "integer", "writable": true },
+      { "@type": "Property", "name": "resolvedStableTicks", "schema": "integer", "writable": true },
+      { "@type": "Property", "name": "lastTransitionUtc", "schema": "dateTime", "writable": true },
+      { "@type": "Property", "name": "totalLoadKw", "schema": "double", "writable": true },
+      { "@type": "Relationship", "name": "contains", "target": "dtmi:ares7:Module;1" },
+      { "@type": "Relationship", "name": "hasSubsystem" },
+      { "@type": "Relationship", "name": "exposedTo", "target": "dtmi:ares7:Environment;1" }
+    ]
+  },
+  {
+    "@id": "dtmi:ares7:Module;1",
+    "@type": "Interface",
+    "@context": "dtmi:dtdl:context;2",
+    "displayName": "Habitat Module",
+    "contents": [
+      { "@type": "Property", "name": "moduleType", "schema": "string", "writable": true },
+      { "@type": "Property", "name": "operationalState", "schema": "string", "writable": true },
+      { "@type": "Property", "name": "priority", "schema": "integer", "writable": true },
+      { "@type": "Property", "name": "isolated", "schema": "boolean", "writable": true },
+      { "@type": "Property", "name": "occupied", "schema": "boolean", "writable": true },
+      { "@type": "Property", "name": "powerDemandKw", "schema": "double", "writable": true },
+      { "@type": "Property", "name": "cabinOxygenPct", "schema": "double", "writable": true },
+      { "@type": "Property", "name": "pressureKPa", "schema": "double", "writable": true }
+    ]
+  },
+  {
+    "@id": "dtmi:ares7:Environment;1",
+    "@type": "Interface",
+    "@context": "dtmi:dtdl:context;2",
+    "displayName": "Mars Environment",
+    "contents": [
+      { "@type": "Property", "name": "scenarioRunId", "schema": "string", "writable": true },
+      { "@type": "Property", "name": "tick", "schema": "integer", "writable": true },
+      { "@type": "Property", "name": "stormIntensityPct", "schema": "double", "writable": true },
+      { "@type": "Property", "name": "dustOpacityPct", "schema": "double", "writable": true },
+      { "@type": "Property", "name": "solarIrradiancePct", "schema": "double", "writable": true },
+      { "@type": "Property", "name": "externalTemperatureC", "schema": "double", "writable": true },
+      { "@type": "Property", "name": "windSpeedMps", "schema": "double", "writable": true }
+    ]
+  },
+  {
+    "@id": "dtmi:ares7:SolarArray;1",
+    "@type": "Interface",
+    "@context": "dtmi:dtdl:context;2",
+    "displayName": "Solar Array",
+    "contents": [
+      { "@type": "Property", "name": "status", "schema": "string", "writable": true },
+      { "@type": "Property", "name": "outputKw", "schema": "double", "writable": true },
+      { "@type": "Property", "name": "outputPct", "schema": "double", "writable": true },
+      { "@type": "Property", "name": "dustDeratePct", "schema": "double", "writable": true },
+      { "@type": "Relationship", "name": "feeds", "target": "dtmi:ares7:BatteryBank;1" }
+    ]
+  },
+  {
+    "@id": "dtmi:ares7:BatteryBank;1",
+    "@type": "Interface",
+    "@context": "dtmi:dtdl:context;2",
+    "displayName": "Battery Bank",
+    "contents": [
+      { "@type": "Property", "name": "status", "schema": "string", "writable": true },
+      { "@type": "Property", "name": "chargePct", "schema": "double", "writable": true },
+      { "@type": "Property", "name": "flowKw", "schema": "double", "writable": true },
+      { "@type": "Property", "name": "busAvailableKw", "schema": "double", "writable": true },
+      { "@type": "Property", "name": "busDemandKw", "schema": "double", "writable": true },
+      { "@type": "Property", "name": "nonCriticalLoadShed", "schema": "boolean", "writable": true },
+      { "@type": "Relationship", "name": "powers" }
+    ]
+  },
+  {
+    "@id": "dtmi:ares7:LifeSupport;1",
+    "@type": "Interface",
+    "@context": "dtmi:dtdl:context;2",
+    "displayName": "Life Support",
+    "contents": [
+      { "@type": "Property", "name": "status", "schema": "string", "writable": true },
+      { "@type": "Property", "name": "oxygenGeneratorOutputPct", "schema": "double", "writable": true },
+      { "@type": "Property", "name": "oxygenReservePct", "schema": "double", "writable": true },
+      { "@type": "Property", "name": "cabinOxygenPct", "schema": "double", "writable": true },
+      { "@type": "Property", "name": "co2Ppm", "schema": "integer", "writable": true },
+      { "@type": "Property", "name": "allocatedPowerKw", "schema": "double", "writable": true },
+      { "@type": "Property", "name": "priorityMode", "schema": "boolean", "writable": true },
+      { "@type": "Relationship", "name": "supplies", "target": "dtmi:ares7:Module;1" }
+    ]
+  },
+  {
+    "@id": "dtmi:ares7:Airlock;1",
+    "@type": "Interface",
+    "@context": "dtmi:dtdl:context;2",
+    "displayName": "Airlock",
+    "contents": [
+      { "@type": "Property", "name": "status", "schema": "string", "writable": true },
+      { "@type": "Property", "name": "sealed", "schema": "boolean", "writable": true },
+      { "@type": "Property", "name": "pressureKPa", "schema": "double", "writable": true },
+      { "@type": "Relationship", "name": "connectsTo", "target": "dtmi:ares7:Module;1" }
+    ]
+  },
+  {
+    "@id": "dtmi:ares7:ScenarioClock;1",
+    "@type": "Interface",
+    "@context": "dtmi:dtdl:context;2",
+    "displayName": "Scenario Clock",
+    "description": "Commit marker updated after all other twins in a simulation tick.",
+    "contents": [
+      { "@type": "Property", "name": "scenarioRunId", "schema": "string", "writable": true },
+      { "@type": "Property", "name": "tick", "schema": "integer", "writable": true },
+      { "@type": "Property", "name": "simulatedMinute", "schema": "integer", "writable": true },
+      { "@type": "Property", "name": "sampleUtc", "schema": "dateTime", "writable": true }
+    ]
+  }
+]

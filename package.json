@@ -1,0 +1,28 @@
+{
+  "name": "ares-7-mars-habitat-digital-twin",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A local-first Mars habitat digital-twin lab targeting Azure Digital Twins.",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "build": "tsc && vite build",
+    "preview": "vite preview --host 0.0.0.0",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:all": "npm test && npm --prefix simulator test && npm --prefix functions test",
+    "build:all": "npm run build && npm --prefix functions run build",
+    "verify": "npm run test:all && npm run build:all"
+  },
+  "dependencies": {
+    "@fontsource/ibm-plex-mono": "^5.2.6",
+    "@fontsource/inter": "^5.2.6",
+    "three": "^0.179.1"
+  },
+  "devDependencies": {
+    "@types/three": "^0.179.0",
+    "typescript": "^5.9.2",
+    "vite": "^7.1.3",
+    "vitest": "^3.2.4"
+  }
+}

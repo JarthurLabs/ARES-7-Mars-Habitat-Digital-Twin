@@ -1,0 +1,41 @@
+name: verify
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Test and build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            simulator/package-lock.json
+            functions/package-lock.json
+
+      - name: Install viewer dependencies
+        run: npm ci
+
+      - name: Install simulator dependencies
+        run: npm --prefix simulator ci
+
+      - name: Install Functions dependencies
+        run: npm --prefix functions ci
+
+      - name: Run all tests and builds
+        run: npm run verify

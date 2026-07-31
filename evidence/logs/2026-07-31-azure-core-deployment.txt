@@ -1,0 +1,35 @@
+ARES-7 Azure core deployment record
+UTC date: 2026-07-31
+Resource group: rg-ares7-lab-eus2
+Region: eastus2
+Deployment: ares7-core-20260731
+
+This is a deliberately redacted evidence record. It excludes subscription,
+tenant, principal, email, connection-string, token, and endpoint identifiers.
+
+Preflight sequence
+1. az bicep build: completed cleanly after moving IoT authentication flags to
+   the IoT Hub resource.
+2. First Azure validation: rejected a network ACL block unsupported by Web
+   PubSub Free_F1. The block was removed; local-key authentication stayed off.
+3. Corrected Azure validation: Succeeded.
+4. What-If: seven creates, no deletes or modifications:
+   - Microsoft.DigitalTwins/digitalTwinsInstances
+   - Microsoft.Devices/IotHubs (F1, capacity 1)
+   - Microsoft.SignalRService/webPubSub (Free_F1, capacity 1)
+   - Microsoft.Storage/storageAccounts (Standard_LRS)
+   - Microsoft.Storage/storageAccounts/blobServices
+   - two private blob containers
+
+Deployment verification
+- Provisioning state: Succeeded
+- Digital Twins: adt-ares7-j6vhj3eh4zuie
+- IoT Hub: iot-ares7-j6vhj3eh4zuie, F1
+- Web PubSub: wps-ares7-j6vhj3eh4zuie, Free_F1
+- Storage: stares7j6vhj3eh4zuie, Standard_LRS
+- paidFallbackAllowed: false
+
+Scope boundary
+This record proves only the core infrastructure. Function Apps, Event Grid,
+RBAC, DTDL upload, twin instances, device provisioning, and an end-to-end live
+scenario remain pending and are not represented as deployed.

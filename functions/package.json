@@ -1,0 +1,27 @@
+{
+  "name": "@ares7/cloud-functions",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "clean": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\"",
+    "build": "npm run clean && tsc -p tsconfig.build.json",
+    "bootstrap:graph": "node scripts/bootstrapGraph.mjs",
+    "approve:containment": "node scripts/approveContainment.mjs",
+    "verify:graph": "node scripts/verifyGraph.mjs",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@azure/digital-twins-core": "^2.0.0",
+    "@azure/functions": "^4.16.2",
+    "@azure/identity": "^4.13.1",
+    "@azure/web-pubsub": "^1.2.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.2.1",
+    "typescript": "^5.9.2",
+    "vitest": "^3.2.4"
+  }
+}

@@ -1,0 +1,56 @@
+ARES-7 LOCAL VERIFICATION
+Captured UTC: 2026-07-31T10:48:14Z
+Command: npm_config_update_notifier=false npm_config_loglevel=silent npm run verify
+Node: v24.14.0
+npm: 11.9.0
+Exit code: 0
+
+VIEWER TESTS
+RUN v3.2.7
+PASS src/simulation.test.ts
+Test Files: 1 passed (1)
+Tests: 3 passed (3)
+
+SIMULATOR TESTS
+PASS scenario emits the documented number of coherent ticks
+PASS storm creates a measurable solar and life-support failure boundary
+PASS raw telemetry never assumes an unapproved controller action
+Tests: 3
+Pass: 3
+Fail: 0
+
+CLOUD CONTROLLER TESTS
+RUN v3.2.7
+PASS test/stateMachine.test.ts
+Test Files: 1 passed (1)
+Tests: 4 passed (4)
+
+VIEWER PRODUCTION BUILD
+Vite: v7.3.6
+Modules transformed: 16
+Output HTML: 0.61 kB (0.37 kB gzip)
+Output CSS: 18.78 kB (4.56 kB gzip)
+Output JavaScript: 533.96 kB (136.37 kB gzip)
+Result: built successfully
+
+The viewer build emitted a non-failing warning because its Three.js bundle is
+larger than Vite's 500 kB warning threshold. Code splitting remains an honest
+performance improvement; it does not affect this verification result.
+
+AZURE FUNCTIONS BUILD
+Command: npm run clean && tsc -p tsconfig.build.json
+Result: completed successfully
+Emitted deployable files:
+  clients.js
+  contracts.js
+  emergencyController.js
+  index.js
+  ingestTelemetry.js
+  stateMachine.js
+  twinPatch.js
+
+TOTAL TEST RESULT
+Viewer: 3 passed
+Simulator: 3 passed
+Controller: 4 passed
+Total: 10 passed, 0 failed

@@ -1,0 +1,15 @@
+{
+  "name": "@ares7/telemetry-simulator",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dry-run": "node src/index.mjs --dry-run --interval 0",
+    "start": "node src/index.mjs",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "azure-iot-device": "^1.18.4",
+    "azure-iot-device-mqtt": "^1.16.4"
+  }
+}

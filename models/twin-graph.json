@@ -1,0 +1,32 @@
+{
+  "twins": [
+    { "id": "ares7-habitat", "model": "dtmi:ares7:Habitat;1" },
+    { "id": "ares7-environment", "model": "dtmi:ares7:Environment;1" },
+    { "id": "ares7-solar-alpha", "model": "dtmi:ares7:SolarArray;1" },
+    { "id": "ares7-battery-alpha", "model": "dtmi:ares7:BatteryBank;1" },
+    { "id": "ares7-life-support", "model": "dtmi:ares7:LifeSupport;1" },
+    { "id": "ares7-airlock-main", "model": "dtmi:ares7:Airlock;1" },
+    { "id": "ares7-module-command", "model": "dtmi:ares7:Module;1" },
+    { "id": "ares7-module-crew", "model": "dtmi:ares7:Module;1" },
+    { "id": "ares7-module-lab", "model": "dtmi:ares7:Module;1" },
+    { "id": "ares7-module-greenhouse", "model": "dtmi:ares7:Module;1" },
+    { "id": "ares7-clock", "model": "dtmi:ares7:ScenarioClock;1" }
+  ],
+  "relationships": [
+    { "id": "rel-hab-environment", "source": "ares7-habitat", "name": "exposedTo", "target": "ares7-environment" },
+    { "id": "rel-hab-command", "source": "ares7-habitat", "name": "contains", "target": "ares7-module-command" },
+    { "id": "rel-hab-crew", "source": "ares7-habitat", "name": "contains", "target": "ares7-module-crew" },
+    { "id": "rel-hab-lab", "source": "ares7-habitat", "name": "contains", "target": "ares7-module-lab" },
+    { "id": "rel-hab-greenhouse", "source": "ares7-habitat", "name": "contains", "target": "ares7-module-greenhouse" },
+    { "id": "rel-solar-battery", "source": "ares7-solar-alpha", "name": "feeds", "target": "ares7-battery-alpha" },
+    { "id": "rel-battery-command", "source": "ares7-battery-alpha", "name": "powers", "target": "ares7-module-command" },
+    { "id": "rel-battery-crew", "source": "ares7-battery-alpha", "name": "powers", "target": "ares7-module-crew" },
+    { "id": "rel-battery-lab", "source": "ares7-battery-alpha", "name": "powers", "target": "ares7-module-lab" },
+    { "id": "rel-battery-greenhouse", "source": "ares7-battery-alpha", "name": "powers", "target": "ares7-module-greenhouse" },
+    { "id": "rel-lss-command", "source": "ares7-life-support", "name": "supplies", "target": "ares7-module-command" },
+    { "id": "rel-lss-crew", "source": "ares7-life-support", "name": "supplies", "target": "ares7-module-crew" },
+    { "id": "rel-lss-lab", "source": "ares7-life-support", "name": "supplies", "target": "ares7-module-lab" },
+    { "id": "rel-lss-greenhouse", "source": "ares7-life-support", "name": "supplies", "target": "ares7-module-greenhouse" },
+    { "id": "rel-airlock-crew", "source": "ares7-airlock-main", "name": "connectsTo", "target": "ares7-module-crew" }
+  ]
+}
