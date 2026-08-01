@@ -8,12 +8,15 @@ export type ScenarioPhase =
 
 export type Severity = "info" | "success" | "warning" | "critical";
 
-export interface Telemetry {
+export interface SensorTelemetry {
   missionSecond: number;
   phase: ScenarioPhase;
   solarOutputKw: number;
+  solarOutputPercent: number;
   batteryPercent: number;
   oxygenPercent: number;
+  oxygenGeneratorOutputPercent: number;
+  oxygenReservePercent: number;
   habitatPressureKpa: number;
   co2Ppm: number;
   dustOpacityPercent: number;
@@ -22,6 +25,9 @@ export interface Telemetry {
   crewLoadKw: number;
   lifeSupportLoadKw: number;
   nonessentialLoadKw: number;
+}
+
+export interface Telemetry extends SensorTelemetry {
   airlockSealed: boolean;
   greenhouseIsolated: boolean;
   loadSheddingActive: boolean;
@@ -38,7 +44,7 @@ export interface MissionEvent {
 }
 
 export interface ScenarioSnapshot {
-  telemetry: Telemetry;
+  telemetry: SensorTelemetry;
   events: MissionEvent[];
 }
 

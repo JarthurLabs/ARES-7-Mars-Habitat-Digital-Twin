@@ -20,8 +20,8 @@ decisions visible.
 - 8 DTDL v2 interfaces.
 - 11 digital-twin definitions and 15 relationship definitions.
 - 12 deterministic raw telemetry ticks.
-- An 8-state cloud controller with one transition per tick.
-- 10 tests across the viewer, simulator, and controller.
+- One 8-state controller shared by the local replay and Functions.
+- 21 tests across the viewer, simulator, shared controller, and Functions adapter.
 - One explicit human approval gate before containment.
 - IoT Hub `F1` and Web PubSub `Free_F1` enforced in Bicep.
 
@@ -36,8 +36,9 @@ decisions visible.
    airlock, shed load, and prioritize life support.
 7. Stable recovery readings are required before restoration and resolution.
 
-The raw simulator never assumes that approval occurred. It reports environment
-and subsystem readings; the controller owns commanded effects.
+The raw simulators never assume that approval occurred. They report environment
+and subsystem readings; one shared controller package owns commanded effects for
+both the local replay and Azure Functions.
 
 ## Architecture
 
@@ -95,10 +96,10 @@ graph, and implementation status.
 | Component | Status | Evidence |
 |---|---|---|
 | Interactive Three.js habitat | Working locally | Three genuine 1600×900 captures |
-| Local incident and approval UI | Working locally | Viewer tests and drill captures |
+| Local incident and approval UI | Working locally through the shared reducer | Viewer and local-adapter tests |
 | Deterministic telemetry simulator | Working locally | 12-frame NDJSON and 3 tests |
 | DTDL graph definition | Defined locally | 8 interfaces, 11 twins, 15 relationships |
-| Ingest and controller Functions | Build and test locally | 4 state-machine tests |
+| Ingest and controller Functions | Build and test locally | Shared-core and Functions adapter tests |
 | Core Bicep | Built, validated, reviewed with What-If, and deployed | Deployment `ares7-core-20260731` succeeded |
 | Azure resource group | Live and tagged | `rg-ares7-lab-eus2` |
 | Azure core services | **Deployed** | Digital Twins, IoT Hub F1, Web PubSub Free_F1, and Standard LRS Storage |
@@ -175,7 +176,8 @@ separate from a future Azure 3D Scenes Studio asset.
 ## Repository map
 
 ```text
-src/         Three.js habitat, mission-control UI, and local incident model
+src/         Three.js habitat, mission-control UI, and local controller adapter
+packages/    Source-only controller contracts, thresholds, transitions, and commands
 simulator/   Deterministic aggregate telemetry and device-side sender
 models/      DTDL v2 interfaces and the defined twin graph
 functions/   Ingest Function, controller, tests, and graph scripts
