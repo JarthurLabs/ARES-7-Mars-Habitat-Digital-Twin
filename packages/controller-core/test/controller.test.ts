@@ -2,9 +2,11 @@ import { describe, expect, it } from "vitest";
 import {
   evaluateController,
   formatSnapshotVersion,
+  parseSnapshotVersion,
+  snapshotVersionMatches,
   type ControllerSnapshot,
   type ControllerState,
-} from "@ares7/controller-core";
+} from "../src/index.js";
 
 const base = (currentState: ControllerState): ControllerSnapshot => ({
   scenarioRunId: "run-7",
@@ -21,8 +23,8 @@ const base = (currentState: ControllerState): ControllerSnapshot => ({
   oxygenReservePct: 96,
 });
 
-describe("emergency controller", () => {
-  it("permits only one transition per tick", () => {
+describe("shared controller", () => {
+  it("permits only one transition per reading", () => {
     const result = evaluateController({
       ...base("NOMINAL"),
       dustOpacityPct: 94,
@@ -34,33 +36,29 @@ describe("emergency controller", () => {
     expect(result.nextState).toBe("STORM_WARNING");
   });
 
-  it("stops at the human approval gate", () => {
-    const risk = evaluateController({
-      ...base("POWER_CRITICAL"),
-      oxygenGeneratorOutputPct: 48,
-      oxygenReservePct: 85,
-    });
-    expect(risk.nextState).toBe("LIFE_SUPPORT_RISK");
-    expect(risk.operatorDecision).toBe("PENDING");
-
-    const waiting = evaluateController({
+  it("emits no actuator commands while approval is pending", () => {
+    const result = evaluateController({
       ...base("LIFE_SUPPORT_RISK"),
       operatorDecision: "PENDING",
     });
-    expect(waiting.nextState).toBe("LIFE_SUPPORT_RISK");
-    expect(waiting.commands.shedNonCriticalLoad).toBe(false);
+    expect(result.nextState).toBe("LIFE_SUPPORT_RISK");
+    expect(Object.values(result.commands).every((active) => !active)).toBe(true);
   });
 
-  it("contains only after approval", () => {
+  it("emits containment commands only after approval", () => {
     const result = evaluateController({
       ...base("LIFE_SUPPORT_RISK"),
       operatorDecision: "APPROVED",
     });
     expect(result.nextState).toBe("CONTAINMENT");
-    expect(result.commands.isolateLab).toBe(true);
-    expect(result.commands.isolateGreenhouse).toBe(true);
-    expect(result.commands.sealAirlock).toBe(true);
-    expect(result.commands.shedNonCriticalLoad).toBe(true);
+    expect(result.commands).toMatchObject({
+      isolateLab: true,
+      isolateGreenhouse: true,
+      sealAirlock: true,
+      shedNonCriticalLoad: true,
+      prioritizeLifeSupport: true,
+      energizeEmergencyBus: true,
+    });
   });
 
   it("requires two stable readings before recovery and resolution", () => {
@@ -80,5 +78,21 @@ describe("emergency controller", () => {
       resolvedStableTicks: 1,
     });
     expect(resolved.nextState).toBe("RESOLVED");
+  });
+});
+
+describe("snapshot version helpers", () => {
+  it("round-trips run IDs that contain punctuation", () => {
+    const snapshotVersion = formatSnapshotVersion("local:drill-7", 12);
+    expect(parseSnapshotVersion(snapshotVersion)).toEqual({
+      scenarioRunId: "local:drill-7",
+      tick: 12,
+      snapshotVersion,
+    });
+    expect(snapshotVersionMatches({ scenarioRunId: "local:drill-7", tick: 12, snapshotVersion })).toBe(true);
+  });
+
+  it("rejects invalid ticks", () => {
+    expect(() => formatSnapshotVersion("run-7", -1)).toThrow(/tick/);
   });
 });

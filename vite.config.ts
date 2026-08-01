@@ -9,6 +9,6 @@ export default defineConfig({
     port: 4173,
   },
   test: {
-    include: ["src/**/*.test.ts"],
+    include: ["src/**/*.test.ts", "packages/**/*.test.ts"],
   },
 });

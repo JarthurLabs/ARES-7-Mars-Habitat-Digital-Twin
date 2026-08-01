@@ -4,6 +4,9 @@
   "private": true,
   "description": "A local-first Mars habitat digital-twin lab targeting Azure Digital Twins.",
   "type": "module",
+  "workspaces": [
+    "packages/*"
+  ],
   "scripts": {
     "dev": "vite --host 0.0.0.0",
     "build": "tsc && vite build",
@@ -15,6 +18,7 @@
     "verify": "npm run test:all && npm run build:all"
   },
   "dependencies": {
+    "@ares7/controller-core": "file:packages/controller-core",
     "@fontsource/ibm-plex-mono": "^5.2.6",
     "@fontsource/inter": "^5.2.6",
     "three": "^0.179.1"

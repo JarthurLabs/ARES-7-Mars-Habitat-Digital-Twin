@@ -3,9 +3,9 @@ import type {
   ControllerSnapshot,
   ControllerState,
   OperatorDecision,
-} from "./contracts.js";
+} from "@ares7/controller-core";
+import { evaluateController, formatSnapshotVersion } from "@ares7/controller-core";
 import { getPubSubClient, getTwinsClient } from "./clients.js";
-import { evaluateController } from "./stateMachine.js";
 import { patches } from "./twinPatch.js";
 
 type Twin = Record<string, unknown> & { etag?: string };
@@ -54,6 +54,7 @@ export async function emergencyController(
   const snapshot: ControllerSnapshot = {
     scenarioRunId: runId,
     tick,
+    snapshotVersion: formatSnapshotVersion(runId, tick),
     currentState: sameRun
       ? stringValue<ControllerState>(habitat.operationalState, "NOMINAL")
       : "NOMINAL",
@@ -78,33 +79,33 @@ export async function emergencyController(
     client.updateDigitalTwin(
       "ares7-module-lab",
       patches({
-        operationalState: decision.isolateLab ? "ISOLATED" : "NOMINAL",
-        isolated: decision.isolateLab,
-        powerDemandKw: decision.isolateLab ? 0 : 7,
+        operationalState: decision.commands.isolateLab ? "ISOLATED" : "NOMINAL",
+        isolated: decision.commands.isolateLab,
+        powerDemandKw: decision.commands.isolateLab ? 0 : 7,
       }),
     ),
     client.updateDigitalTwin(
       "ares7-module-greenhouse",
       patches({
-        operationalState: decision.isolateGreenhouse ? "ISOLATED" : "NOMINAL",
-        isolated: decision.isolateGreenhouse,
-        powerDemandKw: decision.isolateGreenhouse ? 0 : 6,
+        operationalState: decision.commands.isolateGreenhouse ? "ISOLATED" : "NOMINAL",
+        isolated: decision.commands.isolateGreenhouse,
+        powerDemandKw: decision.commands.isolateGreenhouse ? 0 : 6,
       }),
     ),
     client.updateDigitalTwin(
       "ares7-airlock-main",
       patches({
-        status: decision.sealAirlock ? "SEALED" : "READY",
-        sealed: decision.sealAirlock,
+        status: decision.commands.sealAirlock ? "SEALED" : "READY",
+        sealed: decision.commands.sealAirlock,
       }),
     ),
     client.updateDigitalTwin(
       "ares7-battery-alpha",
-      patches({ nonCriticalLoadShed: decision.shedNonCriticalLoad }),
+      patches({ nonCriticalLoadShed: decision.commands.shedNonCriticalLoad }),
     ),
     client.updateDigitalTwin(
       "ares7-life-support",
-      patches({ priorityMode: decision.prioritizeLifeSupport }),
+      patches({ priorityMode: decision.commands.prioritizeLifeSupport }),
     ),
   ]);
 
@@ -122,7 +123,7 @@ export async function emergencyController(
       recoveryStableTicks: decision.recoveryStableTicks,
       resolvedStableTicks: decision.resolvedStableTicks,
       lastTransitionUtc: new Date().toISOString(),
-      totalLoadKw: decision.shedNonCriticalLoad ? 21 : 34,
+      totalLoadKw: decision.commands.shedNonCriticalLoad ? 21 : 34,
     }),
     { ifMatch: habitat.etag },
   );
@@ -137,13 +138,7 @@ export async function emergencyController(
       alarmLevel: decision.alarmLevel,
       action: decision.action,
       operatorDecision: decision.operatorDecision,
-      controls: {
-        isolateLab: decision.isolateLab,
-        isolateGreenhouse: decision.isolateGreenhouse,
-        sealAirlock: decision.sealAirlock,
-        shedNonCriticalLoad: decision.shedNonCriticalLoad,
-        prioritizeLifeSupport: decision.prioritizeLifeSupport,
-      },
+      controls: decision.commands,
     });
   }
 }
