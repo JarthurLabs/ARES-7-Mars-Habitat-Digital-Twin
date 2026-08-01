@@ -33,13 +33,14 @@ npm run verify
 
 The command runs:
 
-- 3 deterministic viewer tests.
+- 14 viewer, local-adapter, and shared-controller tests.
 - 3 raw simulator tests.
-- 4 emergency-controller tests.
+- 4 Functions adapter tests.
 - The production viewer build.
 - The clean Azure Functions TypeScript build.
 
-Expected result: 10 tests pass and both builds complete. A captured run is in
+Expected result: 21 tests pass and both builds complete. The older captured run
+predates the shared package and is preserved in
 [`evidence/logs/2026-07-31-local-verification.txt`](../evidence/logs/2026-07-31-local-verification.txt).
 
 ## Run the visual incident drill
@@ -54,7 +55,7 @@ npm run dev
 4. Select **Run dust storm drill**.
 5. Watch solar output, battery reserve, oxygen mix, pressure, system health,
    scene lighting, particles, and the event stream change together.
-6. At approximately `T+38`, confirm the simulation pauses and displays **Human
+6. At approximately `T+40`, confirm the simulation pauses and displays **Human
    decision required**.
 7. Choose **Hold** once. Confirm that no containment controls execute.
 8. Reset, rerun the drill, and choose **Approve plan**.

@@ -23,13 +23,13 @@ current scope.
 
 | Component | Responsibility | Current state |
 |---|---|---|
-| Three.js viewer | Visualize the habitat, telemetry, events, and approval boundary | Runs locally with a local adapter |
+| Three.js viewer | Visualize the habitat, telemetry, events, and approval boundary | Runs locally through the shared controller package |
 | Telemetry simulator | Produce 12 deterministic aggregate readings | Runs and tests locally; IoT sender implemented |
 | DTDL models | Describe eight domain interfaces | Defined locally |
 | Twin graph | Describe 11 twin instances and 15 relationships | Defined locally; not uploaded yet |
 | Ingest Function | Validate one message and patch subsystem twins | Builds and tests locally; not deployed |
 | Scenario clock | Mark a complete tick after subsystem updates | Defined locally; not created in Azure yet |
-| Emergency controller | Evaluate one guarded state transition | Builds and tests locally; not deployed |
+| Emergency controller | Evaluate one guarded state transition through the shared package | Builds and tests locally; not deployed |
 | Bicep | Create the cost-gated core services | Built, validated, reviewed, and deployed |
 | Azure resource group | Bound cost, tags, and cleanup | `rg-ares7-lab-eus2` exists and is tagged |
 | Azure core services | Provide ADT, IoT, PubSub, and Storage | Deployed; free/cost-gated SKUs verified |
@@ -177,8 +177,8 @@ services are live; integration and end-to-end event evidence remain pending.
 
 ## Known limitations
 
-- The local UI and cloud controller are related implementations, not yet one
-  shared state-machine package.
+- The local UI and Functions use one reducer, but their I/O adapters remain
+  separate and the Azure adapter is not deployed yet.
 - The viewer does not consume Web PubSub or Azure Digital Twins yet.
 - The current 3D habitat is generated with Three.js rather than loaded from an
   Azure 3D Scenes Studio GLB.

@@ -7,8 +7,22 @@ import "@fontsource/ibm-plex-mono/latin-500.css";
 import "@fontsource/ibm-plex-mono/latin-600.css";
 import "./styles.css";
 import { HabitatScene, MODULES } from "./habitat";
+import {
+  applyLocalOperatorDecision,
+  createLocalController,
+  ingestLocalReading,
+  telemetryWithControllerCommands,
+  type LocalControllerState,
+} from "./localControllerAdapter";
 import { nominalTelemetry, snapshotAt, telemetryAt } from "./simulation";
-import type { MissionEvent, ModuleDefinition, ScenarioPhase, Severity, Telemetry } from "./types";
+import type {
+  MissionEvent,
+  ModuleDefinition,
+  ScenarioPhase,
+  SensorTelemetry,
+  Severity,
+  Telemetry,
+} from "./types";
 
 const app = document.querySelector<HTMLDivElement>("#app");
 if (!app) throw new Error("Application root was not found.");
@@ -216,9 +230,8 @@ let running = false;
 let missionSecond = 0;
 let lastTick = performance.now();
 let planReviewed = false;
-let planApproved = false;
-let scenarioRejected = false;
-let currentTelemetry = nominalTelemetry();
+let controller: LocalControllerState = createLocalController("local-replay-001");
+let currentReadings: SensorTelemetry = nominalTelemetry();
 let operatorEvents: MissionEvent[] = [];
 const history: Array<{ solar: number; battery: number }> = Array.from({ length: 36 }, (_, index) => ({
   solar: 81.8 + Math.sin(index * 0.42) * 0.55,
@@ -331,7 +344,6 @@ function healthScore(data: Telemetry): number {
 }
 
 function updateDisplay(data: Telemetry): void {
-  currentTelemetry = data;
   scene.setTelemetry(data);
   updateModules(data);
 
@@ -398,31 +410,44 @@ function updateDisplay(data: Telemetry): void {
   updateEventStream();
 }
 
+function processReading(second: number): void {
+  currentReadings = telemetryAt(second);
+  controller = ingestLocalReading(controller, currentReadings);
+  updateDisplay(telemetryWithControllerCommands(currentReadings, controller.decision.commands));
+
+  if (
+    controller.currentState === "LIFE_SUPPORT_RISK" &&
+    controller.operatorDecision === "PENDING" &&
+    !planReviewed
+  ) {
+    requestDecision();
+  }
+}
+
 function runScenario(): void {
   running = true;
   missionSecond = 0;
   lastTick = performance.now();
   planReviewed = false;
-  planApproved = false;
-  scenarioRejected = false;
+  controller = createLocalController("local-replay-001");
   operatorEvents = [];
   byId<HTMLButtonElement>("inject-storm").disabled = true;
   byId<HTMLDivElement>("decision-card").hidden = true;
-  updateDisplay(telemetryAt(0));
+  processReading(0);
 }
 
 function resetScenario(): void {
   running = false;
   missionSecond = 0;
   planReviewed = false;
-  planApproved = false;
-  scenarioRejected = false;
+  controller = createLocalController("local-replay-001");
   operatorEvents = [];
   byId<HTMLButtonElement>("inject-storm").disabled = false;
   byId<HTMLDivElement>("decision-card").hidden = true;
   document.querySelector<HTMLElement>(".topbar-center")!.dataset.phase = "nominal";
-  currentTelemetry = nominalTelemetry();
-  updateDisplay(currentTelemetry);
+  currentReadings = nominalTelemetry();
+  controller = ingestLocalReading(controller, currentReadings, 0);
+  updateDisplay(telemetryWithControllerCommands(currentReadings, controller.decision.commands));
   scene.resetView();
 }
 
@@ -432,10 +457,11 @@ function requestDecision(): void {
   byId<HTMLDivElement>("decision-card").hidden = false;
   operatorEvents.push({
     id: "audit-review-001",
-    atSecond: 38,
+    atSecond: Math.floor(missionSecond),
     severity: "warning",
     source: "POLICY-GATE",
-    message: "Automated command paused pending human approval.",
+    message: "Shared controller proposed containment and paused for human approval.",
+    action: controller.decision.action,
   });
   updateEventStream();
 }
@@ -444,31 +470,31 @@ byId<HTMLButtonElement>("inject-storm").addEventListener("click", runScenario);
 byId<HTMLButtonElement>("reset-scenario").addEventListener("click", resetScenario);
 byId<HTMLButtonElement>("reset-camera").addEventListener("click", () => scene.resetView());
 byId<HTMLButtonElement>("approve-plan").addEventListener("click", () => {
-  planApproved = true;
-  scenarioRejected = false;
+  controller = applyLocalOperatorDecision(controller, currentReadings, "APPROVED");
   operatorEvents.push({
     id: "audit-approval-001",
-    atSecond: 39,
+    atSecond: Math.floor(missionSecond),
     severity: "success",
     source: "FLIGHT-DIRECTOR",
     message: "Containment plan approved. Command execution released.",
   });
   byId<HTMLDivElement>("decision-card").hidden = true;
+  updateDisplay(telemetryWithControllerCommands(currentReadings, controller.decision.commands));
   running = true;
   lastTick = performance.now();
 });
 byId<HTMLButtonElement>("reject-plan").addEventListener("click", () => {
-  scenarioRejected = true;
+  controller = applyLocalOperatorDecision(controller, currentReadings, "HELD");
   running = false;
   operatorEvents.push({
     id: "audit-hold-001",
-    atSecond: 39,
+    atSecond: Math.floor(missionSecond),
     severity: "critical",
     source: "FLIGHT-DIRECTOR",
     message: "Containment plan held for manual review. No commands executed.",
   });
   byId<HTMLDivElement>("decision-card").hidden = true;
-  updateEventStream();
+  updateDisplay(telemetryWithControllerCommands(currentReadings, controller.decision.commands));
 });
 
 byId<HTMLButtonElement>("toggle-events").addEventListener("click", (event) => {
@@ -485,26 +511,18 @@ function animationLoop(now: number): void {
   if (running) {
     const deltaSeconds = (now - lastTick) / 1000;
     lastTick = now;
-    const nextSecond = missionSecond + deltaSeconds * 1.35;
-    if (nextSecond >= 38 && !planReviewed) {
-      missionSecond = 38;
-      updateDisplay(telemetryAt(missionSecond));
-      requestDecision();
-    } else {
-      missionSecond = nextSecond;
-      updateDisplay(telemetryAt(missionSecond));
-      if (missionSecond >= 90) {
-        running = false;
-        byId<HTMLButtonElement>("inject-storm").disabled = false;
-      }
+    missionSecond += deltaSeconds * 1.35;
+    processReading(missionSecond);
+    if (missionSecond >= 90) {
+      running = false;
+      byId<HTMLButtonElement>("inject-storm").disabled = false;
     }
-  } else if (!scenarioRejected && !planApproved && missionSecond === 0) {
-    currentTelemetry.missionSecond = 0;
   }
   requestAnimationFrame(animationLoop);
 }
 
-updateDisplay(nominalTelemetry());
+controller = ingestLocalReading(controller, currentReadings, 0);
+updateDisplay(telemetryWithControllerCommands(currentReadings, controller.decision.commands));
 requestAnimationFrame(animationLoop);
 
 window.addEventListener("beforeunload", () => scene.dispose());

@@ -10,15 +10,14 @@ describe("ARES-7 deterministic storm simulation", () => {
     expect(phaseAt(80)).toBe("recovery");
   });
 
-  it("sheds load before recovery and keeps critical systems powered", () => {
-    const before = telemetryAt(44);
-    const after = telemetryAt(60);
+  it("emits readings only, even after the modeled incident boundary", () => {
+    const laterReading = telemetryAt(60);
 
-    expect(before.loadSheddingActive).toBe(false);
-    expect(after.loadSheddingActive).toBe(true);
-    expect(after.nonessentialLoadKw).toBe(0);
-    expect(after.emergencyBusActive).toBe(true);
-    expect(after.airlockSealed).toBe(true);
+    expect(laterReading.nonessentialLoadKw).toBeGreaterThan(0);
+    expect("loadSheddingActive" in laterReading).toBe(false);
+    expect("emergencyBusActive" in laterReading).toBe(false);
+    expect("airlockSealed" in laterReading).toBe(false);
+    expect("greenhouseIsolated" in laterReading).toBe(false);
   });
 
   it("emits only events that have actually occurred", () => {
