@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildFrame, SCENARIO_TICKS } from "../src/scenario.mjs";
+import { buildFrame, payloadHashFor, SCENARIO_TICKS } from "../src/scenario.mjs";
 
 const runId = "00000000-0000-4000-8000-000000000007";
 const sample = "2026-07-31T00:00:00.000Z";
@@ -13,6 +13,10 @@ test("scenario emits the documented number of coherent ticks", () => {
     assert.equal(frame.simulatedMinute, tick * 30);
     assert.equal(frame.scenarioRunId, runId);
     assert.equal(frame.sampleUtc, sample);
+    assert.equal(frame.schemaVersion, "2.0");
+    assert.equal(frame.snapshotVersion, `v2:${runId}:tick:${tick}`);
+    assert.match(frame.payloadHash, /^[a-f0-9]{64}$/);
+    assert.equal(frame.payloadHash, payloadHashFor(frame));
   }
 });
 

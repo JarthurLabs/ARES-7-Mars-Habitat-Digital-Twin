@@ -1,4 +1,4 @@
-export const SNAPSHOT_VERSION = 1 as const;
+export const SNAPSHOT_VERSION = 2 as const;
 
 export type ControllerState =
   | "NOMINAL"

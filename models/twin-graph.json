@@ -1,16 +1,16 @@
 {
   "twins": [
-    { "id": "ares7-habitat", "model": "dtmi:ares7:Habitat;1" },
-    { "id": "ares7-environment", "model": "dtmi:ares7:Environment;1" },
-    { "id": "ares7-solar-alpha", "model": "dtmi:ares7:SolarArray;1" },
-    { "id": "ares7-battery-alpha", "model": "dtmi:ares7:BatteryBank;1" },
-    { "id": "ares7-life-support", "model": "dtmi:ares7:LifeSupport;1" },
-    { "id": "ares7-airlock-main", "model": "dtmi:ares7:Airlock;1" },
-    { "id": "ares7-module-command", "model": "dtmi:ares7:Module;1" },
-    { "id": "ares7-module-crew", "model": "dtmi:ares7:Module;1" },
-    { "id": "ares7-module-lab", "model": "dtmi:ares7:Module;1" },
-    { "id": "ares7-module-greenhouse", "model": "dtmi:ares7:Module;1" },
-    { "id": "ares7-clock", "model": "dtmi:ares7:ScenarioClock;1" }
+    { "id": "ares7-habitat", "model": "dtmi:ares7:Habitat;2" },
+    { "id": "ares7-environment", "model": "dtmi:ares7:Environment;2" },
+    { "id": "ares7-solar-alpha", "model": "dtmi:ares7:SolarArray;2" },
+    { "id": "ares7-battery-alpha", "model": "dtmi:ares7:BatteryBank;2" },
+    { "id": "ares7-life-support", "model": "dtmi:ares7:LifeSupport;2" },
+    { "id": "ares7-airlock-main", "model": "dtmi:ares7:Airlock;2" },
+    { "id": "ares7-module-command", "model": "dtmi:ares7:Module;2" },
+    { "id": "ares7-module-crew", "model": "dtmi:ares7:Module;2" },
+    { "id": "ares7-module-lab", "model": "dtmi:ares7:Module;2" },
+    { "id": "ares7-module-greenhouse", "model": "dtmi:ares7:Module;2" },
+    { "id": "ares7-clock", "model": "dtmi:ares7:ScenarioClock;2" }
   ],
   "relationships": [
     { "id": "rel-hab-environment", "source": "ares7-habitat", "name": "exposedTo", "target": "ares7-environment" },
