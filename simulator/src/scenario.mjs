@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 const FRAMES = [
   { dust: 5, storm: 4, solar: 86, solarKw: 82.4, battery: 92, flowKw: 18, oxygenOutput: 100, oxygenReserve: 96, cabinOxygen: 20.9, co2: 612, pressure: 101.2, wind: 8, temperature: -42 },
   { dust: 35, storm: 32, solar: 64, solarKw: 61.3, battery: 89, flowKw: -7, oxygenOutput: 96, oxygenReserve: 95, cabinOxygen: 20.88, co2: 650, pressure: 101.1, wind: 18, temperature: -45 },
@@ -15,17 +17,31 @@ const FRAMES = [
 
 export const SCENARIO_TICKS = FRAMES.length;
 
+function canonicalJson(value) {
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
+  if (value && typeof value === "object") {
+    return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${canonicalJson(value[key])}`).join(",")}}`;
+  }
+  return JSON.stringify(value);
+}
+
+export function payloadHashFor(frame) {
+  const { payloadHash: _payloadHash, ...payload } = frame;
+  return createHash("sha256").update(canonicalJson(payload)).digest("hex");
+}
+
 export function buildFrame(tick, scenarioRunId, sampleUtc) {
   if (!Number.isInteger(tick) || tick < 0 || tick >= FRAMES.length) {
     throw new RangeError(`tick must be an integer from 0 to ${FRAMES.length - 1}`);
   }
   if (!scenarioRunId) throw new Error("scenarioRunId is required");
   const frame = FRAMES[tick];
-  return {
-    schemaVersion: "1.0",
+  const payload = {
+    schemaVersion: "2.0",
     messageType: "ares7.aggregateTelemetry",
     scenarioRunId,
     tick,
+    snapshotVersion: `v2:${scenarioRunId}:tick:${tick}`,
     simulatedMinute: tick * 30,
     sampleUtc,
     environment: {
@@ -53,4 +69,5 @@ export function buildFrame(tick, scenarioRunId, sampleUtc) {
       allocatedPowerKw: 14
     }
   };
+  return { ...payload, payloadHash: payloadHashFor(payload) };
 }

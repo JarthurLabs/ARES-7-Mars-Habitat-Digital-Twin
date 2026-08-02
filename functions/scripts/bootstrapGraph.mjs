@@ -12,11 +12,19 @@ if (!endpoint) throw new Error("AZURE_DIGITAL_TWINS_ENDPOINT is required.");
 const models = JSON.parse(await readFile(resolve(repoRoot, "models/ares7-models.json"), "utf8"));
 const graph = JSON.parse(await readFile(resolve(repoRoot, "models/twin-graph.json"), "utf8"));
 const client = new DigitalTwinsClient(endpoint, new DefaultAzureCredential());
+const initialStamp = {
+  scenarioRunId: "not-started",
+  tick: -1,
+  snapshotVersion: "not-committed",
+  payloadHash: "0".repeat(64),
+  sampleUtc: "2026-07-31T00:00:00.000Z"
+};
 
 const initial = {
   "ares7-habitat": {
     operationalState: "NOMINAL",
     scenarioRunId: "not-started",
+    snapshotVersion: "not-committed",
     lastProcessedTick: -1,
     simulatedMinute: 0,
     alarmLevel: "NONE",
@@ -29,23 +37,22 @@ const initial = {
     totalLoadKw: 34
   },
   "ares7-environment": {
-    scenarioRunId: "not-started",
-    tick: -1,
+    ...initialStamp,
     stormIntensityPct: 4,
     dustOpacityPct: 5,
     solarIrradiancePct: 86,
     externalTemperatureC: -42,
     windSpeedMps: 8
   },
-  "ares7-solar-alpha": { status: "NOMINAL", outputKw: 82.4, outputPct: 86, dustDeratePct: 14 },
-  "ares7-battery-alpha": { status: "NOMINAL", chargePct: 92, flowKw: 18, busAvailableKw: 82.4, busDemandKw: 34, nonCriticalLoadShed: false },
-  "ares7-life-support": { status: "NOMINAL", oxygenGeneratorOutputPct: 100, oxygenReservePct: 96, cabinOxygenPct: 20.9, co2Ppm: 612, allocatedPowerKw: 14, priorityMode: false },
+  "ares7-solar-alpha": { ...initialStamp, status: "NOMINAL", outputKw: 82.4, outputPct: 86, dustDeratePct: 14 },
+  "ares7-battery-alpha": { ...initialStamp, status: "NOMINAL", chargePct: 92, flowKw: 18, busAvailableKw: 82.4, busDemandKw: 34, nonCriticalLoadShed: false },
+  "ares7-life-support": { ...initialStamp, status: "NOMINAL", oxygenGeneratorOutputPct: 100, oxygenReservePct: 96, cabinOxygenPct: 20.9, co2Ppm: 612, allocatedPowerKw: 14, priorityMode: false },
   "ares7-airlock-main": { status: "READY", sealed: false, pressureKPa: 101.2 },
-  "ares7-module-command": { moduleType: "COMMAND", operationalState: "NOMINAL", priority: 1, isolated: false, occupied: true, powerDemandKw: 8, cabinOxygenPct: 20.9, pressureKPa: 101.2 },
-  "ares7-module-crew": { moduleType: "CREW", operationalState: "NOMINAL", priority: 1, isolated: false, occupied: true, powerDemandKw: 9, cabinOxygenPct: 20.9, pressureKPa: 101.2 },
-  "ares7-module-lab": { moduleType: "SCIENCE_LAB", operationalState: "NOMINAL", priority: 3, isolated: false, occupied: false, powerDemandKw: 7, cabinOxygenPct: 20.9, pressureKPa: 101.2 },
-  "ares7-module-greenhouse": { moduleType: "GREENHOUSE", operationalState: "NOMINAL", priority: 4, isolated: false, occupied: false, powerDemandKw: 6, cabinOxygenPct: 20.9, pressureKPa: 101.2 },
-  "ares7-clock": { scenarioRunId: "not-started", tick: -1, simulatedMinute: 0, sampleUtc: "2026-07-31T00:00:00.000Z" }
+  "ares7-module-command": { ...initialStamp, moduleType: "COMMAND", operationalState: "NOMINAL", priority: 1, isolated: false, occupied: true, powerDemandKw: 8, cabinOxygenPct: 20.9, pressureKPa: 101.2 },
+  "ares7-module-crew": { ...initialStamp, moduleType: "CREW", operationalState: "NOMINAL", priority: 1, isolated: false, occupied: true, powerDemandKw: 9, cabinOxygenPct: 20.9, pressureKPa: 101.2 },
+  "ares7-module-lab": { ...initialStamp, moduleType: "SCIENCE_LAB", operationalState: "NOMINAL", priority: 3, isolated: false, occupied: false, powerDemandKw: 7, cabinOxygenPct: 20.9, pressureKPa: 101.2 },
+  "ares7-module-greenhouse": { ...initialStamp, moduleType: "GREENHOUSE", operationalState: "NOMINAL", priority: 4, isolated: false, occupied: false, powerDemandKw: 6, cabinOxygenPct: 20.9, pressureKPa: 101.2 },
+  "ares7-clock": { ...initialStamp, committedSnapshotId: "none", simulatedMinute: 0 }
 };
 
 try {

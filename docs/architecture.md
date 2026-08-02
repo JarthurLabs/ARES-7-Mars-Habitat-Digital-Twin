@@ -25,9 +25,9 @@ current scope.
 |---|---|---|
 | Three.js viewer | Visualize the habitat, telemetry, events, and approval boundary | Runs locally through the shared controller package |
 | Telemetry simulator | Produce 12 deterministic aggregate readings | Runs and tests locally; IoT sender implemented |
-| DTDL models | Describe eight domain interfaces | Defined locally |
-| Twin graph | Describe 11 twin instances and 15 relationships | Defined locally; not uploaded yet |
-| Ingest Function | Validate one message and patch subsystem twins | Builds and tests locally; not deployed |
+| DTDL models | Describe eight domain interfaces plus immutable telemetry snapshots | Defined locally |
+| Twin graph | Describe 11 base twins, 15 relationships, and per-tick snapshots | Defined locally; not uploaded yet |
+| Ingest Function | Validate, snapshot, project, and ETag-commit one message | Builds and tests locally; not deployed |
 | Scenario clock | Mark a complete tick after subsystem updates | Defined locally; not created in Azure yet |
 | Emergency controller | Evaluate one guarded state transition through the shared package | Builds and tests locally; not deployed |
 | Bicep | Create the cost-gated core services | Built, validated, reviewed, and deployed |
@@ -76,8 +76,8 @@ Dotted arrows are planned integration.
 
 ## Twin graph
 
-The graph uses eight DTDL v2 interfaces, 11 twin instances, and 15
-relationships.
+The graph uses nine DTDL v2 interfaces, 11 base twin instances, 15
+relationships, and one immutable snapshot twin for every accepted run/tick.
 
 ```mermaid
 flowchart LR
@@ -107,20 +107,27 @@ Studio behavior layer.
 
 ## Coherent ticks
 
-Each simulator message includes a `scenarioRunId`, monotonically increasing
-`tick`, simulated time, and grouped environment, power, and life-support
-readings. One aggregate message is deliberate: it defines which readings
-belong together before the ingest Function fans them out.
+Each simulator message includes a UUID `scenarioRunId`, contiguous `tick`, v2
+snapshot identity, UTC sample time, stable payload hash, simulated time, and
+grouped readings. One aggregate message is deliberate: it defines what belongs
+together before the ingest Function fans it out.
 
 The ingest sequence is:
 
-1. Validate schema version, message type, run ID, tick, and required sections.
-2. Patch environment, solar, battery, life-support, and module twins.
-3. Patch `ares7-clock` only after every preceding update succeeds.
+1. Decode plain or Base64 JSON and validate identity, schema, ranges, UTC time,
+   and hash.
+2. Create the immutable snapshot twin. An identical redelivery reuses it; a
+   conflicting duplicate is rejected.
+3. Stamp environment, solar, battery, life-support, and module projections with
+   the same run, tick, version, time, and hash.
+4. Patch `ares7-clock` only after every preceding update succeeds, guarded by
+   the clock ETag.
 
-The clock is therefore a commit marker. A controller triggered by a subsystem
-update could see a mixture of old and new values; a controller triggered by
-the clock sees the completed tick.
+The clock is therefore the ingest commit marker, and a failed middle write can
+be retried without inventing a second snapshot. One limit remains on purpose:
+the controller still reads mutable projections, so a later tick could start
+while it reads the last committed one. The next milestone moves controller
+input to the exact immutable snapshot named by the clock.
 
 ## Controller and approval boundary
 

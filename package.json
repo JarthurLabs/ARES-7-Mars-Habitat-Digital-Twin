@@ -13,9 +13,11 @@
     "preview": "vite preview --host 0.0.0.0",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:all": "npm test && npm --prefix simulator test && npm --prefix functions test",
+    "test:all": "npm test && npm --prefix simulator test && npm --prefix functions run test:coverage",
     "build:all": "npm run build && npm --prefix functions run build",
-    "verify": "npm run test:all && npm run build:all"
+    "models:validate": "node scripts/validate-models.mjs",
+    "secrets:check": "node scripts/check-secrets.mjs",
+    "verify": "npm run models:validate && npm run secrets:check && npm run test:all && npm run build:all"
   },
   "dependencies": {
     "@ares7/controller-core": "file:packages/controller-core",
