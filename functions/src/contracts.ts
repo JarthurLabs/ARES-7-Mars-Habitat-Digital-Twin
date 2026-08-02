@@ -1,8 +1,10 @@
 export interface AggregateTelemetry {
-  schemaVersion: "1.0";
+  schemaVersion: "2.0";
   messageType: "ares7.aggregateTelemetry";
   scenarioRunId: string;
   tick: number;
+  snapshotVersion: string;
+  payloadHash: string;
   simulatedMinute: number;
   sampleUtc: string;
   environment: {
@@ -29,4 +31,20 @@ export interface AggregateTelemetry {
     habitatPressureKPa: number;
     allocatedPowerKw: number;
   };
+}
+
+export type DeepReadonly<T> = T extends (...arguments_: never[]) => unknown
+  ? T
+  : T extends object
+    ? { readonly [Key in keyof T]: DeepReadonly<T[Key]> }
+    : T;
+
+export interface TelemetrySnapshot {
+  readonly scenarioRunId: string;
+  readonly tick: number;
+  readonly snapshotVersion: string;
+  readonly payloadHash: string;
+  readonly simulatedMinute: number;
+  readonly sampleUtc: string;
+  readonly telemetry: DeepReadonly<AggregateTelemetry>;
 }
