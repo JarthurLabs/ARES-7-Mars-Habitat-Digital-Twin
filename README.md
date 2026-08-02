@@ -47,7 +47,7 @@ flowchart LR
   SIM[Deterministic simulator<br/>12 coherent ticks]
   IOT[IoT Hub F1]
   ING[Telemetry ingest Function]
-  ADT[(Azure Digital Twins<br/>8 models · 11 twins · 15 relationships)]
+  ADT[(Azure Digital Twins<br/>9 models · 11 base twins · per-tick snapshots)]
   CLOCK[Scenario clock<br/>commit marker]
   CTL[Emergency controller]
   OP[Operator approval]
@@ -66,9 +66,10 @@ flowchart LR
 ```
 
 The simulator sends one aggregate message for each scenario tick. The ingest
-Function validates its schema, updates environment, power, life-support, and
-module twins, then updates `ares7-clock` last. That clock update is the commit
-marker for a coherent snapshot.
+Function validates and hashes it, creates an immutable snapshot twin, stamps
+every projection with the same run/tick/version, then updates `ares7-clock`
+last using its ETag. If a projection falls over halfway through, the clock does
+not pretend everything is fine. A same-payload retry can finish the work.
 
 The controller ignores non-clock events. It identifies work by scenario run
 and tick, rejects duplicate or older ticks, permits only one state transition
@@ -81,8 +82,9 @@ graph, and implementation status.
 
 ## Safety and reliability choices
 
-- Aggregate telemetry defines a clear consistency boundary.
-- The clock twin is updated only after every subsystem reading for a tick.
+- Aggregate telemetry defines a clear consistency boundary and stable hash.
+- An immutable twin preserves each accepted run/tick payload.
+- The clock twin is ETag committed only after every projection is stamped.
 - At-least-once delivery is expected; duplicate and older ticks are ignored.
 - A conflicting habitat write fails rather than silently overwriting newer
   state.
@@ -179,7 +181,7 @@ separate from a future Azure 3D Scenes Studio asset.
 src/         Three.js habitat, mission-control UI, and local controller adapter
 packages/    Source-only controller contracts, thresholds, transitions, and commands
 simulator/   Deterministic aggregate telemetry and device-side sender
-models/      DTDL v2 interfaces and the defined twin graph
+models/      DTDL v2 interfaces, immutable snapshot model, and base twin graph
 functions/   Ingest Function, controller, tests, and graph scripts
 infra/       Cost-gated core Azure Bicep
 docs/        Architecture, runbook, incident journal, and cost controls
