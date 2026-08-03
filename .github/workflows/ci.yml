@@ -52,3 +52,6 @@ jobs:
 
       - name: Verify compiled infrastructure controls
         run: node scripts/validate-infra.mjs /tmp/ares7-core.json /tmp/ares7-integration.json
+
+      - name: Verify Azure deployment and cleanup guards
+        run: node scripts/validate-azure-guards.mjs
