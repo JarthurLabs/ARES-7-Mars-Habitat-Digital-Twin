@@ -1,5 +1,9 @@
 # ARES-7 — Mars Habitat Digital Twin
 
+[![Verify](https://github.com/JarthurLabs/ARES-7-Mars-Habitat-Digital-Twin/actions/workflows/ci.yml/badge.svg)](https://github.com/JarthurLabs/ARES-7-Mars-Habitat-Digital-Twin/actions/workflows/ci.yml)
+[![CodeQL](https://github.com/JarthurLabs/ARES-7-Mars-Habitat-Digital-Twin/actions/workflows/codeql.yml/badge.svg)](https://github.com/JarthurLabs/ARES-7-Mars-Habitat-Digital-Twin/actions/workflows/codeql.yml)
+[![Dependency review](https://github.com/JarthurLabs/ARES-7-Mars-Habitat-Digital-Twin/actions/workflows/dependency-review.yml/badge.svg)](https://github.com/JarthurLabs/ARES-7-Mars-Habitat-Digital-Twin/actions/workflows/dependency-review.yml)
+
 ARES-7 is an Azure portfolio lab that turns a deterministic Martian
 dust storm into a traceable, human-approved containment sequence across a
 modeled habitat.
