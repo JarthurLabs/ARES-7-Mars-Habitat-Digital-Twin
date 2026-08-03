@@ -1,0 +1,34 @@
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 3
+    groups:
+      viewer-dependencies:
+        patterns: ["*"]
+
+  - package-ecosystem: npm
+    directory: /functions
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 3
+    groups:
+      function-dependencies:
+        patterns: ["*"]
+
+  - package-ecosystem: npm
+    directory: /simulator
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 3
+    groups:
+      simulator-dependencies:
+        patterns: ["*"]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 3

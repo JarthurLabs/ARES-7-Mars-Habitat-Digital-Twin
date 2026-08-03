@@ -1,0 +1,48 @@
+name: Dependency review
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dependency-review-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    name: Review dependency changes
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Review changed npm manifests and lockfiles
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          changed=0
+          for directory in . functions simulator; do
+            prefix="${directory#./}"
+            if [[ "$directory" == "." ]]; then
+              paths=(package.json package-lock.json)
+            else
+              paths=("$prefix/package.json" "$prefix/package-lock.json")
+            fi
+
+            if ! git diff --quiet "$BASE_SHA" "$HEAD_SHA" -- "${paths[@]}"; then
+              changed=1
+              npm --prefix "$directory" audit --audit-level=moderate
+            fi
+          done
+
+          if [[ "$changed" -eq 0 ]]; then
+            echo "This pull request changes no npm manifest or lockfile."
+          fi
