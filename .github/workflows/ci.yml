@@ -8,6 +8,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: verify-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   verify:
     name: Test and build
@@ -16,10 +20,10 @@ jobs:
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
@@ -39,3 +43,12 @@ jobs:
 
       - name: Run all tests and builds
         run: npm run verify
+
+      - name: Build core Bicep
+        run: az bicep build --file infra/main.bicep --outfile /tmp/ares7-core.json
+
+      - name: Build integration Bicep
+        run: az bicep build --file infra/integration.bicep --outfile /tmp/ares7-integration.json
+
+      - name: Verify compiled infrastructure controls
+        run: node scripts/validate-infra.mjs /tmp/ares7-core.json /tmp/ares7-integration.json
