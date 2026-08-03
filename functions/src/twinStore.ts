@@ -71,6 +71,10 @@ export class InMemoryTwinStore implements TwinStore {
     this.#rules = failureRules.map((rule) => ({ ...rule, seen: 0 }));
   }
 
+  injectFailure(rule: FailureRule): void {
+    this.#rules.push({ ...rule, seen: 0 });
+  }
+
   async getTwin(id: string): Promise<TwinRecord | undefined> {
     this.#maybeFail("get", id);
     const twin = this.#twins.get(id);

@@ -9,12 +9,20 @@
       { "@type": "Property", "name": "operationalState", "schema": "string", "writable": true },
       { "@type": "Property", "name": "scenarioRunId", "schema": "string", "writable": true },
       { "@type": "Property", "name": "snapshotVersion", "schema": "string", "writable": true },
+      { "@type": "Property", "name": "payloadHash", "schema": "string", "writable": true },
       { "@type": "Property", "name": "lastProcessedTick", "schema": "integer", "writable": true },
       { "@type": "Property", "name": "simulatedMinute", "schema": "integer", "writable": true },
       { "@type": "Property", "name": "alarmLevel", "schema": "string", "writable": true },
       { "@type": "Property", "name": "activeIncident", "schema": "string", "writable": true },
       { "@type": "Property", "name": "controllerAction", "schema": "string", "writable": true },
       { "@type": "Property", "name": "operatorDecision", "schema": "string", "writable": true },
+      { "@type": "Property", "name": "decisionId", "schema": "string", "writable": true },
+      { "@type": "Property", "name": "decisionScenarioRunId", "schema": "string", "writable": true },
+      { "@type": "Property", "name": "decisionTick", "schema": "integer", "writable": true },
+      { "@type": "Property", "name": "lastDecisionId", "schema": "string", "writable": true },
+      { "@type": "Property", "name": "lastActionId", "schema": "string", "writable": true },
+      { "@type": "Property", "name": "lastActionSource", "schema": "string", "writable": true },
+      { "@type": "Property", "name": "lastBroadcastActionId", "schema": "string", "writable": true },
       { "@type": "Property", "name": "recoveryStableTicks", "schema": "integer", "writable": true },
       { "@type": "Property", "name": "resolvedStableTicks", "schema": "integer", "writable": true },
       { "@type": "Property", "name": "lastTransitionUtc", "schema": "dateTime", "writable": true },
@@ -42,7 +50,10 @@
       { "@type": "Property", "name": "tick", "schema": "integer", "writable": true },
       { "@type": "Property", "name": "snapshotVersion", "schema": "string", "writable": true },
       { "@type": "Property", "name": "payloadHash", "schema": "string", "writable": true },
-      { "@type": "Property", "name": "sampleUtc", "schema": "dateTime", "writable": true }
+      { "@type": "Property", "name": "sampleUtc", "schema": "dateTime", "writable": true },
+      { "@type": "Property", "name": "lastActionId", "schema": "string", "writable": true },
+      { "@type": "Property", "name": "actionRunId", "schema": "string", "writable": true },
+      { "@type": "Property", "name": "actionTick", "schema": "integer", "writable": true }
     ]
   },
   {
@@ -98,6 +109,9 @@
       { "@type": "Property", "name": "busAvailableKw", "schema": "double", "writable": true },
       { "@type": "Property", "name": "busDemandKw", "schema": "double", "writable": true },
       { "@type": "Property", "name": "nonCriticalLoadShed", "schema": "boolean", "writable": true },
+      { "@type": "Property", "name": "lastActionId", "schema": "string", "writable": true },
+      { "@type": "Property", "name": "actionRunId", "schema": "string", "writable": true },
+      { "@type": "Property", "name": "actionTick", "schema": "integer", "writable": true },
       { "@type": "Relationship", "name": "powers" }
     ]
   },
@@ -119,6 +133,9 @@
       { "@type": "Property", "name": "co2Ppm", "schema": "integer", "writable": true },
       { "@type": "Property", "name": "allocatedPowerKw", "schema": "double", "writable": true },
       { "@type": "Property", "name": "priorityMode", "schema": "boolean", "writable": true },
+      { "@type": "Property", "name": "lastActionId", "schema": "string", "writable": true },
+      { "@type": "Property", "name": "actionRunId", "schema": "string", "writable": true },
+      { "@type": "Property", "name": "actionTick", "schema": "integer", "writable": true },
       { "@type": "Relationship", "name": "supplies", "target": "dtmi:ares7:Module;2" }
     ]
   },
@@ -131,6 +148,9 @@
       { "@type": "Property", "name": "status", "schema": "string", "writable": true },
       { "@type": "Property", "name": "sealed", "schema": "boolean", "writable": true },
       { "@type": "Property", "name": "pressureKPa", "schema": "double", "writable": true },
+      { "@type": "Property", "name": "lastActionId", "schema": "string", "writable": true },
+      { "@type": "Property", "name": "actionRunId", "schema": "string", "writable": true },
+      { "@type": "Property", "name": "actionTick", "schema": "integer", "writable": true },
       { "@type": "Relationship", "name": "connectsTo", "target": "dtmi:ares7:Module;2" }
     ]
   },

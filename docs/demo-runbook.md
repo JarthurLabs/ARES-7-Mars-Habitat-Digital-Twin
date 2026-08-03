@@ -35,11 +35,11 @@ The command runs:
 
 - 14 viewer, local-adapter, and shared-controller tests.
 - 3 raw simulator tests.
-- 4 Functions adapter tests.
+- 34 Functions tests, including handler integration and injected failures.
 - The production viewer build.
 - The clean Azure Functions TypeScript build.
 
-Expected result: 21 tests pass and both builds complete. The older captured run
+Expected result: 51 tests pass and both builds complete. The older captured run
 predates the shared package and is preserved in
 [`evidence/logs/2026-07-31-local-verification.txt`](../evidence/logs/2026-07-31-local-verification.txt).
 
@@ -89,8 +89,8 @@ Use this order for a five-minute review:
 
 1. `simulator/src/scenario.mjs` — deterministic inputs.
 2. `functions/src/ingestTelemetry.ts` — validation and clock-last commit.
-3. `functions/src/stateMachine.ts` — transition and approval rules.
-4. `functions/src/emergencyController.ts` — duplicate guard, ETag, and commands.
+3. `packages/controller-core/src/controller.ts` — shared transition and approval rules.
+4. `functions/src/emergencyController.ts` — snapshot checks, catch-up, reconciliation, and broadcast ordering.
 5. `models/twin-graph.json` — the defined, not-yet-uploaded Azure graph.
 6. `infra/main.bicep` — service, security, tag, and SKU constraints.
 

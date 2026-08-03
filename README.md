@@ -17,11 +17,11 @@ decisions visible.
 
 ## At a glance
 
-- 8 DTDL v2 interfaces.
+- 9 DTDL v2 interfaces.
 - 11 digital-twin definitions and 15 relationship definitions.
 - 12 deterministic raw telemetry ticks.
 - One 8-state controller shared by the local replay and Functions.
-- 21 tests across the viewer, simulator, shared controller, and Functions adapter.
+- 51 tests across the viewer, simulator, shared controller, and Function handlers.
 - One explicit human approval gate before containment.
 - IoT Hub `F1` and Web PubSub `Free_F1` enforced in Bicep.
 
@@ -71,11 +71,12 @@ every projection with the same run/tick/version, then updates `ares7-clock`
 last using its ETag. If a projection falls over halfway through, the clock does
 not pretend everything is fine. A same-payload retry can finish the work.
 
-The controller ignores non-clock events. It identifies work by scenario run
-and tick, rejects duplicate or older ticks, permits only one state transition
-per tick, and updates the habitat twin using its ETag. At the life-support
-boundary it records `operatorDecision=PENDING` and applies no containment
-controls. Approval is also ETag guarded.
+The controller ignores unrelated twin noise. For clock events it reads the
+exact immutable snapshot named by the commit marker and catches up any missing
+ticks in order. For approval events it uses a separate decision and action ID,
+so approval after the final telemetry tick runs immediately. Each actuator
+write is ETag guarded and resumable; the habitat commits last, and Web PubSub
+broadcasts only the state that actually stuck.
 
 See [the architecture notes](docs/architecture.md) for the trust boundaries,
 graph, and implementation status.
@@ -88,6 +89,8 @@ graph, and implementation status.
 - At-least-once delivery is expected; duplicate and older ticks are ignored.
 - A conflicting habitat write fails rather than silently overwriting newer
   state.
+- Partial commands converge by action ID instead of replaying finished writes.
+- A Web PubSub failure cannot roll back authoritative twin state.
 - Service clients use `DefaultAzureCredential`; no owner key is stored in code.
 - The simulator accepts only a device-scoped IoT credential at runtime.
 - The containment plan cannot execute while the operator decision is pending.
@@ -100,8 +103,8 @@ graph, and implementation status.
 | Interactive Three.js habitat | Working locally | Three genuine 1600×900 captures |
 | Local incident and approval UI | Working locally through the shared reducer | Viewer and local-adapter tests |
 | Deterministic telemetry simulator | Working locally | 12-frame NDJSON and 3 tests |
-| DTDL graph definition | Defined locally | 8 interfaces, 11 twins, 15 relationships |
-| Ingest and controller Functions | Build and test locally | Shared-core and Functions adapter tests |
+| DTDL graph definition | Defined locally | 9 interfaces, 11 base twins, 15 relationships, and per-tick snapshots |
+| Ingest and controller Functions | Build and test locally | Shared-core plus handler integration and failure-injection tests |
 | Core Bicep | Built, validated, reviewed with What-If, and deployed | Deployment `ares7-core-20260731` succeeded |
 | Azure resource group | Live and tagged | `rg-ares7-lab-eus2` |
 | Azure core services | **Deployed** | Digital Twins, IoT Hub F1, Web PubSub Free_F1, and Standard LRS Storage |

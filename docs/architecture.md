@@ -124,10 +124,11 @@ The ingest sequence is:
    the clock ETag.
 
 The clock is therefore the ingest commit marker, and a failed middle write can
-be retried without inventing a second snapshot. One limit remains on purpose:
-the controller still reads mutable projections, so a later tick could start
-while it reads the last committed one. The next milestone moves controller
-input to the exact immutable snapshot named by the clock.
+be retried without inventing a second snapshot. The controller reads the exact
+snapshot ID named by that marker, reconstructs and hashes its payload, and
+checks its run, tick, and version before making a decision. Mutable projections
+remain useful for queries and the future scene; they are no longer controller
+input.
 
 ## Controller and approval boundary
 
@@ -144,16 +145,25 @@ stateDiagram-v2
   RESTORATION --> RESOLVED: two stable resolved readings
 ```
 
-Only one transition is permitted per tick. The controller compares the clock
-tick with the habitat's `lastProcessedTick`; duplicate and older work is
-ignored. The final habitat patch carries its ETag, so a concurrent change fails
-instead of silently overwriting newer state.
+Telemetry still permits only one transition per tick. If Event Grid skips a
+delivery, the controller walks from `lastProcessedTick + 1` to the committed
+clock tick and evaluates every immutable snapshot in order. It never jumps
+straight to the newest reading and quietly loses a transition.
 
 Entering `LIFE_SUPPORT_RISK` sets `operatorDecision=PENDING`. No lab isolation,
 greenhouse isolation, airlock seal, load shed, or life-support priority command
-is applied in that state. The approval script first verifies the exact state
-and decision, then updates the twin with the same ETag protection. A later
-clock event can advance the controller into containment.
+is applied in that state. The approval script verifies the state and writes a
+new decision ID tied to the current run and tick under the habitat ETag. That
+habitat event runs the controller immediately. Telemetry and decisions have
+separate action IDs, so approving after the final telemetry tick still enters
+containment.
+
+Actuators are reconciled in a fixed order. Each write carries the deterministic
+action ID, run, and tick plus the twin's current ETag. A retry skips matching
+writes and resumes at the first gap. The habitat is committed last, then Web
+PubSub reads the applied twin state and broadcasts it. If broadcasting falls
+over, Mars does not get to roll the command back; a later delivery retries only
+the broadcast.
 
 The raw simulator deliberately does not lower bus demand or increase allocated
 life-support power. Those are commanded effects and belong to the controller.
