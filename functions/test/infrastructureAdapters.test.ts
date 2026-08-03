@@ -148,6 +148,19 @@ describe("Azure Digital Twins store", () => {
     await expect(conflict.createTwin("lab", "model", {})).rejects.toBeInstanceOf(TwinConflictError);
   });
 
+  it("fails closed when a newly created twin cannot be reread", async () => {
+    const store = new AzureDigitalTwinStore(
+      digitalTwinsClient({
+        upsertDigitalTwin: vi.fn().mockResolvedValue({}),
+        getDigitalTwin: vi.fn().mockRejectedValue({ statusCode: 404 }),
+      }) as never,
+    );
+
+    await expect(store.createTwin("lab", "model", {})).rejects.toThrow(
+      "Twin lab was not readable after creation",
+    );
+  });
+
   it("updates with ETag protection and translates write conflicts", async () => {
     const updateDigitalTwin = vi.fn().mockResolvedValue({});
     const client = digitalTwinsClient({
@@ -173,6 +186,19 @@ describe("Azure Digital Twins store", () => {
     );
     await expect(conflict.updateTwin("habitat", { sealed: true })).rejects.toBeInstanceOf(
       TwinConflictError,
+    );
+  });
+
+  it("fails closed when an updated twin cannot be reread", async () => {
+    const store = new AzureDigitalTwinStore(
+      digitalTwinsClient({
+        updateDigitalTwin: vi.fn().mockResolvedValue({}),
+        getDigitalTwin: vi.fn().mockRejectedValue({ statusCode: 404 }),
+      }) as never,
+    );
+
+    await expect(store.updateTwin("habitat", { sealed: true })).rejects.toThrow(
+      "Twin habitat was not readable after update",
     );
   });
 });
