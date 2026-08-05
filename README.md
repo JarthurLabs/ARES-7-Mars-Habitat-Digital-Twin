@@ -27,7 +27,7 @@ decisions visible.
 - 11 digital-twin definitions and 15 relationship definitions.
 - 12 deterministic raw telemetry ticks.
 - One 8-state controller shared by the local replay and Functions.
-- 70 tests across the viewer, browser, simulator, shared controller, and Function handlers.
+- 76 checks: 70 viewer/shared-core, simulator, and Function tests plus 6 browser tests.
 - One explicit human approval gate before containment.
 - IoT Hub `F1` and Web PubSub `Free_F1` enforced in Bicep.
 
