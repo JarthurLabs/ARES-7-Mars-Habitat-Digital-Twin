@@ -4,11 +4,12 @@ import { patches } from "../src/twinPatch.js";
 
 const azure = vi.hoisted(() => ({
   eventGrid: vi.fn(),
+  http: vi.fn(),
   twinsConstructor: vi.fn(),
   pubSubConstructor: vi.fn(),
 }));
 
-vi.mock("@azure/functions", () => ({ app: { eventGrid: azure.eventGrid } }));
+vi.mock("@azure/functions", () => ({ app: { eventGrid: azure.eventGrid, http: azure.http } }));
 vi.mock("@azure/identity", () => ({ DefaultAzureCredential: vi.fn() }));
 vi.mock("@azure/digital-twins-core", () => ({
   DigitalTwinsClient: function DigitalTwinsClient(...args: unknown[]) {
@@ -76,7 +77,7 @@ describe("Azure adapter wiring", () => {
     );
   });
 
-  it("registers both Event Grid handlers", async () => {
+  it("registers both Event Grid handlers and the viewer negotiate endpoint", async () => {
     await import("../src/index.js");
     expect(azure.eventGrid).toHaveBeenCalledTimes(2);
     expect(azure.eventGrid).toHaveBeenCalledWith(
@@ -86,6 +87,15 @@ describe("Azure adapter wiring", () => {
     expect(azure.eventGrid).toHaveBeenCalledWith(
       "emergencyController",
       expect.objectContaining({ handler: expect.any(Function) }),
+    );
+    expect(azure.http).toHaveBeenCalledWith(
+      "negotiateViewer",
+      expect.objectContaining({
+        route: "viewer/negotiate",
+        methods: ["GET", "OPTIONS"],
+        authLevel: "anonymous",
+        handler: expect.any(Function),
+      }),
     );
   });
 });
