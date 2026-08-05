@@ -4,7 +4,7 @@
 [![CodeQL](https://github.com/JarthurLabs/ARES-7-Mars-Habitat-Digital-Twin/actions/workflows/codeql.yml/badge.svg)](https://github.com/JarthurLabs/ARES-7-Mars-Habitat-Digital-Twin/actions/workflows/codeql.yml)
 [![Dependency review](https://github.com/JarthurLabs/ARES-7-Mars-Habitat-Digital-Twin/actions/workflows/dependency-review.yml/badge.svg)](https://github.com/JarthurLabs/ARES-7-Mars-Habitat-Digital-Twin/actions/workflows/dependency-review.yml)
 
-[Open the free deterministic replay](https://jarthurlabs.github.io/ARES-7-Mars-Habitat-Digital-Twin/). It runs from a static build and does not pretend to be live Azure data.
+[Public replay target](https://jarthurlabs.github.io/ARES-7-Mars-Habitat-Digital-Twin/) — publication is waiting for GitHub Pages to be enabled with **GitHub Actions** as its source. The artifact is a deterministic static build and does not pretend to be live Azure data.
 
 ARES-7 is an Azure portfolio lab that turns a deterministic Martian
 dust storm into a traceable, human-approved containment sequence across a
@@ -115,7 +115,7 @@ graph, and implementation status.
 | Azure resource group | Live and tagged | `rg-ares7-lab-eus2` |
 | Azure core services | **Deployed** | Digital Twins, IoT Hub F1, Web PubSub Free_F1, and Standard LRS Storage |
 | Azure event path | **Pending** | Functions, Event Grid, RBAC, graph upload, and device identity are not yet live |
-| Static public replay | Publishes from the verified `dist` artifact on `main` | Pages workflow and artifact guard |
+| Static public replay | Workflow ready; repository Pages setting still needs enabling | Validated `dist`-only workflow and artifact guard |
 | Web PubSub browser adapter | Optional and read-only | UI defaults to `LOCAL REPLAY`; live mode needs a short-lived receive-only negotiate URL |
 | Azure 3D Scenes Studio asset | Planned | Current scene is procedural Three.js |
 
