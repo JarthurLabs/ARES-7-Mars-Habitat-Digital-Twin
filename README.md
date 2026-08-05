@@ -4,6 +4,8 @@
 [![CodeQL](https://github.com/JarthurLabs/ARES-7-Mars-Habitat-Digital-Twin/actions/workflows/codeql.yml/badge.svg)](https://github.com/JarthurLabs/ARES-7-Mars-Habitat-Digital-Twin/actions/workflows/codeql.yml)
 [![Dependency review](https://github.com/JarthurLabs/ARES-7-Mars-Habitat-Digital-Twin/actions/workflows/dependency-review.yml/badge.svg)](https://github.com/JarthurLabs/ARES-7-Mars-Habitat-Digital-Twin/actions/workflows/dependency-review.yml)
 
+[Open the free deterministic replay](https://jarthurlabs.github.io/ARES-7-Mars-Habitat-Digital-Twin/). It runs from a static build and does not pretend to be live Azure data.
+
 ARES-7 is an Azure portfolio lab that turns a deterministic Martian
 dust storm into a traceable, human-approved containment sequence across a
 modeled habitat.
@@ -25,7 +27,7 @@ decisions visible.
 - 11 digital-twin definitions and 15 relationship definitions.
 - 12 deterministic raw telemetry ticks.
 - One 8-state controller shared by the local replay and Functions.
-- 51 tests across the viewer, simulator, shared controller, and Function handlers.
+- 70 tests across the viewer, browser, simulator, shared controller, and Function handlers.
 - One explicit human approval gate before containment.
 - IoT Hub `F1` and Web PubSub `Free_F1` enforced in Bicep.
 
@@ -66,7 +68,7 @@ flowchart LR
   CTL -->|idempotent patches + ETag| ADT
   OP -->|APPROVED| CTL
   CTL -. optional broadcast .-> WPS
-  WPS -. planned cloud adapter .-> UI
+  WPS -. optional read-only adapter .-> UI
 ```
 
 The simulator sends one aggregate message for each scenario tick. The ingest
@@ -104,7 +106,7 @@ graph, and implementation status.
 
 | Component | Status | Evidence |
 |---|---|---|
-| Interactive Three.js habitat | Working locally | Three genuine 1600×900 captures |
+| Interactive Three.js habitat | Responsive local replay | Genuine 1600×900 and 390×844 captures plus browser tests |
 | Local incident and approval UI | Working locally through the shared reducer | Viewer and local-adapter tests |
 | Deterministic telemetry simulator | Working locally | 12-frame NDJSON and 3 tests |
 | DTDL graph definition | Defined locally | 9 interfaces, 11 base twins, 15 relationships, and per-tick snapshots |
@@ -113,7 +115,8 @@ graph, and implementation status.
 | Azure resource group | Live and tagged | `rg-ares7-lab-eus2` |
 | Azure core services | **Deployed** | Digital Twins, IoT Hub F1, Web PubSub Free_F1, and Standard LRS Storage |
 | Azure event path | **Pending** | Functions, Event Grid, RBAC, graph upload, and device identity are not yet live |
-| Web PubSub browser adapter | Planned | Current UI says `LOCAL TWIN SIM` |
+| Static public replay | Publishes from the verified `dist` artifact on `main` | Pages workflow and artifact guard |
+| Web PubSub browser adapter | Optional and read-only | UI defaults to `LOCAL REPLAY`; live mode needs a short-lived receive-only negotiate URL |
 | Azure 3D Scenes Studio asset | Planned | Current scene is procedural Three.js |
 
 The core deployment is genuine Azure state and is preserved in redacted CLI
@@ -141,6 +144,11 @@ Open the URL printed by Vite, run the dust-storm drill, and inspect the event
 stream when the simulation pauses at the approval gate. The detailed sequence
 is in the [demo runbook](docs/demo-runbook.md).
 
+The static replay requires no install. Its data-source chip, run ID, tick,
+snapshot version, and controller state stay visible so a reviewer can tell
+exactly what the screen is showing. Select a habitat module to open the twin
+inspector; arrow keys move through the module list and `Escape` closes it.
+
 Generate a network-free telemetry run:
 
 ```bash
@@ -152,6 +160,8 @@ npm --prefix simulator run dry-run
 | Nominal | Approval required | Containment active |
 |---|---|---|
 | [![Nominal state](evidence/screenshots/ares7-nominal.png)](evidence/screenshots/ares7-nominal.png) | [![Human approval gate](evidence/screenshots/ares7-human-approval-gate.png)](evidence/screenshots/ares7-human-approval-gate.png) | [![Containment active](evidence/screenshots/ares7-containment-active.png)](evidence/screenshots/ares7-containment-active.png) |
+
+The current public-demo captures are [desktop with the twin inspector](evidence/screenshots/ares7-public-demo-desktop-20260805.png) and [mobile at 390×844](evidence/screenshots/ares7-public-demo-mobile-20260805.png). They were produced through the built application, not assembled in an image editor.
 
 The [evidence register](evidence/README.md) separates verified local behavior,
 verified Azure core infrastructure, and pending integration proof. An item is

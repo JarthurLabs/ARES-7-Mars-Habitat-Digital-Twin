@@ -13,10 +13,13 @@
     "preview": "vite preview --host 0.0.0.0",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:e2e": "npm run build && playwright test",
     "test:all": "npm test && npm --prefix simulator test && npm --prefix functions run test:coverage",
     "build:all": "npm run build && npm --prefix functions run build",
     "models:validate": "node scripts/validate-models.mjs",
     "secrets:check": "node scripts/check-secrets.mjs",
+    "pages:validate": "node scripts/validate-pages-artifact.mjs",
+    "evidence:capture": "npm run build && node scripts/capture-demo-evidence.mjs",
     "verify": "npm run models:validate && npm run secrets:check && npm run test:all && npm run build:all"
   },
   "dependencies": {
@@ -26,6 +29,7 @@
     "three": "^0.185.1"
   },
   "devDependencies": {
+    "@playwright/test": "1.62.1",
     "@types/three": "^0.185.3",
     "typescript": "^7.0.2",
     "vite": "^8.2.0",

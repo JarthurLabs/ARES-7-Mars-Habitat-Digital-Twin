@@ -4,6 +4,8 @@ dist/
 **/dist/
 coverage/
 **/coverage/
+playwright-report/
+test-results/
 
 .env
 .env.*
