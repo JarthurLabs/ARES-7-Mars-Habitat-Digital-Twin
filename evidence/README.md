@@ -24,7 +24,7 @@ evidence so a screenshot is never asked to prove more than it shows.
 | LOCAL-03 | Approval is followed by visible containment effects | [`screenshots/ares7-containment-active.png`](screenshots/ares7-containment-active.png) | Verified local |
 | LOCAL-04 | Desktop replay exposes coherent identity and the twin inspector at 1600×900 | [`screenshots/ares7-public-demo-desktop-20260805.png`](screenshots/ares7-public-demo-desktop-20260805.png) | Verified local |
 | LOCAL-05 | Replay fits 390×844 without horizontal overflow | [`screenshots/ares7-public-demo-mobile-20260805.png`](screenshots/ares7-public-demo-mobile-20260805.png) | Verified local |
-| TEST-01 | 70 unit, handler, failure-injection, and browser tests plus production builds complete | CI workflow and local verification | Verified local |
+| TEST-01 | 70 unit, handler, simulator, and failure-injection tests plus 6 browser tests and production builds complete | CI workflow and local verification | Verified local |
 | SIM-01 | Raw simulator emits 12 coherent, non-authorizing frames | [`telemetry/2026-07-31-dust-storm.ndjson`](telemetry/2026-07-31-dust-storm.ndjson) | Verified local |
 | AZ-00 | Tagged resource group and four core services exist | [`screenshots/ares7-azure-live-resource-table-20260731.jpg`](screenshots/ares7-azure-live-resource-table-20260731.jpg) | Verified Azure |
 | AZ-01 | Template proposed only seven expected cost-gated resources | [`logs/2026-07-31-azure-core-deployment.txt`](logs/2026-07-31-azure-core-deployment.txt) | Verified Azure preflight |
