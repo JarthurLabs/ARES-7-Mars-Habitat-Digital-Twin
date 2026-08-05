@@ -15,6 +15,8 @@ import {
   type LocalControllerState,
 } from "./localControllerAdapter";
 import { nominalTelemetry, snapshotAt, telemetryAt } from "./simulation";
+import { inspectTwin } from "./twinInspector";
+import { connectReadOnlyLiveViewer, type ReadOnlyLiveConnection } from "./webPubSubAdapter";
 import type {
   MissionEvent,
   ModuleDefinition,
@@ -40,6 +42,7 @@ const icon = (name: "pulse" | "azure" | "warning" | "play" | "reset" | "cube"): 
 };
 
 app.innerHTML = `
+  <a class="skip-link" href="#scene-stage">Skip to habitat controls</a>
   <div class="command-center">
     <header class="topbar">
       <div class="brand-lockup">
@@ -49,16 +52,22 @@ app.innerHTML = `
           <div class="brand-subtitle">DIGITAL TWIN MISSION CONTROL</div>
         </div>
       </div>
-      <div class="topbar-center">
+      <div class="topbar-center" role="status" aria-live="polite">
         <span class="status-dot"></span>
         <span>MISSION NETWORK</span>
         <strong>NOMINAL</strong>
       </div>
+      <dl class="runtime-identity" aria-label="Current snapshot identity">
+        <div><dt>RUN</dt><dd id="run-id">local-replay-001</dd></div>
+        <div><dt>TICK</dt><dd id="run-tick">0</dd></div>
+        <div><dt>SNAPSHOT</dt><dd id="snapshot-version">v2:local-replay-001:tick:0</dd></div>
+        <div><dt>CONTROLLER</dt><dd id="controller-state">NOMINAL</dd></div>
+      </dl>
       <div class="topbar-actions">
-        <button class="connection-chip" id="connection-chip" type="button" title="Telemetry adapter status">
+        <div class="connection-chip" id="connection-chip" role="status" aria-live="polite" title="Telemetry adapter status">
           ${icon("azure")}
-          <span><small>DATA ADAPTER</small>LOCAL TWIN SIM</span>
-        </button>
+          <span><small>DATA SOURCE</small><strong id="data-source-label">LOCAL REPLAY</strong></span>
+        </div>
         <div class="mission-clock"><small>MARS RELAY / UTC</small><strong id="utc-clock">--:--:--</strong></div>
       </div>
     </header>
@@ -107,6 +116,7 @@ app.innerHTML = `
       <main class="scene-column">
         <div class="scene-stage" id="scene-stage">
           <div id="three-scene"></div>
+          <p class="sr-only" id="scene-keyboard-help">Use the module buttons to select a digital twin. Press R while the habitat view is focused to reset the camera.</p>
           <div class="scan-lines" aria-hidden="true"></div>
 
           <div class="scene-toolbar">
@@ -114,7 +124,7 @@ app.innerHTML = `
             <button type="button" id="reset-camera">RESET VIEW</button>
           </div>
 
-          <div class="storm-alert" id="storm-alert" hidden>
+          <div class="storm-alert" id="storm-alert" role="status" aria-live="polite" hidden>
             ${icon("warning")}
             <div><small>ACTIVE INCIDENT</small><strong id="alert-title">DUST FRONT APPROACHING</strong></div>
             <span id="alert-countdown">T−00:12</span>
@@ -130,7 +140,7 @@ app.innerHTML = `
               <div><span class="live-pulse"></span>MISSION EVENT STREAM</div>
               <div class="event-actions"><span id="event-count">00 EVENTS</span><button id="toggle-events" type="button">COLLAPSE</button></div>
             </header>
-            <div class="event-list" id="event-list">
+            <div class="event-list" id="event-list" aria-live="polite" aria-relevant="additions text">
               <div class="empty-events"><span>STREAM READY</span>Run the drill to generate traceable mission events.</div>
             </div>
           </section>
@@ -186,7 +196,7 @@ app.innerHTML = `
             <li>Seal external airlock</li>
             <li>Shed nonessential circuits</li>
           </ol>
-          <p>Generated from live twin dependencies. No command is sent until an operator approves it.</p>
+          <p>Generated from the shared controller's modeled dependencies. No command is applied until an operator approves it.</p>
           <div class="decision-actions">
             <button id="approve-plan" type="button">APPROVE PLAN</button>
             <button id="reject-plan" type="button">HOLD</button>
@@ -201,6 +211,32 @@ app.innerHTML = `
         </section>
       </aside>
     </div>
+
+    <div class="drawer-backdrop" id="drawer-backdrop" hidden></div>
+    <aside class="twin-inspector" id="twin-inspector" aria-labelledby="inspector-title" aria-modal="true" role="dialog" hidden>
+      <header>
+        <div><small>SELECTED DIGITAL TWIN</small><h2 id="inspector-title">Twin inspector</h2></div>
+        <button id="close-inspector" type="button" aria-label="Close twin inspector">×</button>
+      </header>
+      <div class="inspector-body">
+        <dl class="inspector-identity">
+          <div><dt>MODEL</dt><dd id="inspector-model">—</dd></div>
+          <div><dt>TWIN ID</dt><dd id="inspector-id">—</dd></div>
+          <div><dt>RUN ID</dt><dd id="inspector-run">—</dd></div>
+          <div><dt>TICK</dt><dd id="inspector-tick">0</dd></div>
+          <div><dt>SNAPSHOT VERSION</dt><dd id="inspector-version">—</dd></div>
+        </dl>
+        <section aria-labelledby="relationships-heading">
+          <h3 id="relationships-heading">Related twins</h3>
+          <ul class="relationship-list" id="inspector-relationships"></ul>
+        </section>
+        <section aria-labelledby="properties-heading">
+          <h3 id="properties-heading">Current properties</h3>
+          <dl class="property-list" id="inspector-properties"></dl>
+        </section>
+      </div>
+    </aside>
+    <p class="sr-only" id="mission-announcer" aria-live="polite"></p>
   </div>
 `;
 
@@ -213,7 +249,7 @@ const byId = <T extends HTMLElement>(id: string): T => {
 const moduleList = byId<HTMLDivElement>("module-list");
 moduleList.innerHTML = MODULES.map(
   ({ id, label, code, criticality }) => `
-    <button class="module-row" type="button" data-module="${id}">
+    <button class="module-row" type="button" data-module="${id}" aria-haspopup="dialog">
       <span class="module-indicator"></span>
       <span><strong>${label}</strong><small>${code} · ${criticality.toUpperCase()}</small></span>
       <i>›</i>
@@ -233,6 +269,12 @@ let planReviewed = false;
 let controller: LocalControllerState = createLocalController("local-replay-001");
 let currentReadings: SensorTelemetry = nominalTelemetry();
 let operatorEvents: MissionEvent[] = [];
+let currentTelemetry: Telemetry;
+let selectedModule: ModuleDefinition | undefined;
+let lastInspectorTrigger: HTMLElement | null = null;
+let liveConnection: ReadOnlyLiveConnection | undefined;
+let activeSource: "local" | "azure-live" = "local";
+let liveIdentity: { scenarioRunId: string; tick: number; snapshotVersion: string; controllerState: string } | undefined;
 const history: Array<{ solar: number; battery: number }> = Array.from({ length: 36 }, (_, index) => ({
   solar: 81.8 + Math.sin(index * 0.42) * 0.55,
   battery: 94.2,
@@ -248,9 +290,73 @@ const phaseLabels: Record<ScenarioPhase, string> = {
 };
 
 function selectModule(module: ModuleDefinition): void {
+  selectedModule = module;
   document.querySelectorAll(".module-row").forEach((row) => row.classList.remove("selected"));
   document.querySelector(`[data-module="${module.id}"]`)?.classList.add("selected");
   byId<HTMLElement>("scene-stage").dataset.selectedModule = module.code;
+  updateInspector();
+  openInspector();
+}
+
+function escapeHtml(value: unknown): string {
+  return String(value)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;");
+}
+
+function currentIdentity(): { scenarioRunId: string; tick: number; snapshotVersion: string; controllerState: string } {
+  if (activeSource === "azure-live" && liveIdentity) return liveIdentity;
+  const tick = Math.max(0, controller.lastTick);
+  return {
+    scenarioRunId: controller.scenarioRunId,
+    tick,
+    snapshotVersion: `v2:${controller.scenarioRunId}:tick:${tick}`,
+    controllerState: controller.currentState,
+  };
+}
+
+function updateRuntimeIdentity(): void {
+  const identity = currentIdentity();
+  byId<HTMLElement>("run-id").textContent = identity.scenarioRunId;
+  byId<HTMLElement>("run-tick").textContent = String(identity.tick);
+  byId<HTMLElement>("snapshot-version").textContent = identity.snapshotVersion;
+  byId<HTMLElement>("controller-state").textContent = identity.controllerState;
+}
+
+function updateInspector(): void {
+  if (!selectedModule || !currentTelemetry) return;
+  const identity = currentIdentity();
+  const inspected = inspectTwin(selectedModule, currentTelemetry, identity.scenarioRunId, identity.tick);
+  byId<HTMLElement>("inspector-title").textContent = inspected.label;
+  byId<HTMLElement>("inspector-model").textContent = inspected.model;
+  byId<HTMLElement>("inspector-id").textContent = inspected.twinId;
+  byId<HTMLElement>("inspector-run").textContent = inspected.scenarioRunId;
+  byId<HTMLElement>("inspector-tick").textContent = String(inspected.tick);
+  byId<HTMLElement>("inspector-version").textContent = identity.snapshotVersion;
+  byId<HTMLUListElement>("inspector-relationships").innerHTML = inspected.relatedTwins
+    .map((twinId) => `<li>${escapeHtml(twinId)}</li>`)
+    .join("");
+  byId<HTMLDListElement>("inspector-properties").innerHTML = Object.entries(inspected.properties)
+    .map(([name, value]) => `<div><dt>${escapeHtml(name)}</dt><dd>${escapeHtml(value)}</dd></div>`)
+    .join("");
+}
+
+function openInspector(): void {
+  lastInspectorTrigger = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+  const drawer = byId<HTMLElement>("twin-inspector");
+  drawer.hidden = false;
+  byId<HTMLElement>("drawer-backdrop").hidden = false;
+  document.body.classList.add("drawer-open");
+  byId<HTMLButtonElement>("close-inspector").focus();
+}
+
+function closeInspector(): void {
+  byId<HTMLElement>("twin-inspector").hidden = true;
+  byId<HTMLElement>("drawer-backdrop").hidden = true;
+  document.body.classList.remove("drawer-open");
+  lastInspectorTrigger?.focus();
 }
 
 document.querySelectorAll<HTMLButtonElement>(".module-row").forEach((button) => {
@@ -260,6 +366,14 @@ document.querySelectorAll<HTMLButtonElement>(".module-row").forEach((button) => 
       scene.focusModule(module.id);
       selectModule(module);
     }
+  });
+  button.addEventListener("keydown", (event) => {
+    if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
+    event.preventDefault();
+    const buttons = Array.from(document.querySelectorAll<HTMLButtonElement>(".module-row"));
+    const index = buttons.indexOf(button);
+    const nextIndex = event.key === "Home" ? 0 : event.key === "End" ? buttons.length - 1 : event.key === "ArrowDown" ? (index + 1) % buttons.length : (index - 1 + buttons.length) % buttons.length;
+    buttons[nextIndex]?.focus();
   });
 });
 
@@ -344,6 +458,7 @@ function healthScore(data: Telemetry): number {
 }
 
 function updateDisplay(data: Telemetry): void {
+  currentTelemetry = data;
   scene.setTelemetry(data);
   updateModules(data);
 
@@ -407,6 +522,8 @@ function updateDisplay(data: Telemetry): void {
   const networkStatus = document.querySelector<HTMLElement>(".topbar-center strong");
   if (networkStatus) networkStatus.textContent = data.phase === "degraded" ? "DEGRADED" : data.phase === "nominal" ? "NOMINAL" : "INCIDENT ACTIVE";
   document.querySelector<HTMLElement>(".topbar-center")!.dataset.phase = data.phase;
+  updateRuntimeIdentity();
+  updateInspector();
   updateEventStream();
 }
 
@@ -425,6 +542,7 @@ function processReading(second: number): void {
 }
 
 function runScenario(): void {
+  if (activeSource !== "local") return;
   running = true;
   missionSecond = 0;
   lastTick = performance.now();
@@ -437,6 +555,7 @@ function runScenario(): void {
 }
 
 function resetScenario(): void {
+  if (activeSource !== "local") return;
   running = false;
   missionSecond = 0;
   planReviewed = false;
@@ -464,11 +583,15 @@ function requestDecision(): void {
     action: controller.decision.action,
   });
   updateEventStream();
+  byId<HTMLElement>("mission-announcer").textContent = "Human decision required. The containment plan is ready for review.";
+  byId<HTMLButtonElement>("approve-plan").focus();
 }
 
 byId<HTMLButtonElement>("inject-storm").addEventListener("click", runScenario);
 byId<HTMLButtonElement>("reset-scenario").addEventListener("click", resetScenario);
 byId<HTMLButtonElement>("reset-camera").addEventListener("click", () => scene.resetView());
+byId<HTMLButtonElement>("close-inspector").addEventListener("click", closeInspector);
+byId<HTMLElement>("drawer-backdrop").addEventListener("click", closeInspector);
 byId<HTMLButtonElement>("approve-plan").addEventListener("click", () => {
   controller = applyLocalOperatorDecision(controller, currentReadings, "APPROVED");
   operatorEvents.push({
@@ -479,6 +602,7 @@ byId<HTMLButtonElement>("approve-plan").addEventListener("click", () => {
     message: "Containment plan approved. Command execution released.",
   });
   byId<HTMLDivElement>("decision-card").hidden = true;
+  byId<HTMLElement>("mission-announcer").textContent = "Containment plan approved. Controller commands are active.";
   updateDisplay(telemetryWithControllerCommands(currentReadings, controller.decision.commands));
   running = true;
   lastTick = performance.now();
@@ -494,6 +618,7 @@ byId<HTMLButtonElement>("reject-plan").addEventListener("click", () => {
     message: "Containment plan held for manual review. No commands executed.",
   });
   byId<HTMLDivElement>("decision-card").hidden = true;
+  byId<HTMLElement>("mission-announcer").textContent = "Containment plan held. No commands were applied.";
   updateDisplay(telemetryWithControllerCommands(currentReadings, controller.decision.commands));
 });
 
@@ -502,6 +627,57 @@ byId<HTMLButtonElement>("toggle-events").addEventListener("click", (event) => {
   consoleElement.classList.toggle("collapsed");
   (event.currentTarget as HTMLButtonElement).textContent = consoleElement.classList.contains("collapsed") ? "EXPAND" : "COLLAPSE";
 });
+
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && !byId<HTMLElement>("twin-inspector").hidden) closeInspector();
+});
+
+function setDataSource(label: string, state: "local" | "connecting" | "live" | "error"): void {
+  byId<HTMLElement>("data-source-label").textContent = label;
+  byId<HTMLElement>("connection-chip").dataset.source = state;
+}
+
+async function initializeDataSource(): Promise<void> {
+  const wantsLive = new URLSearchParams(window.location.search).get("source") === "azure";
+  const negotiateUrl = import.meta.env.VITE_ARES7_NEGOTIATE_URL as string | undefined;
+  if (!wantsLive) {
+    setDataSource("LOCAL REPLAY", "local");
+    return;
+  }
+  if (!negotiateUrl) {
+    setDataSource("LOCAL REPLAY · LIVE NOT CONFIGURED", "error");
+    byId<HTMLElement>("mission-announcer").textContent = "Azure live mode was requested, but this build has no negotiate endpoint. Continuing with local replay.";
+    return;
+  }
+  setDataSource("AZURE · CONNECTING", "connecting");
+  try {
+    liveConnection = await connectReadOnlyLiveViewer(
+      negotiateUrl,
+      (snapshot) => {
+        activeSource = "azure-live";
+        liveIdentity = {
+          scenarioRunId: snapshot.scenarioRunId,
+          tick: snapshot.tick,
+          snapshotVersion: snapshot.snapshotVersion,
+          controllerState: snapshot.controllerState,
+        };
+        running = false;
+        byId<HTMLButtonElement>("inject-storm").disabled = true;
+        byId<HTMLButtonElement>("reset-scenario").disabled = true;
+        updateDisplay(snapshot.telemetry);
+      },
+      (status) => {
+        if (status === "connected") setDataSource("AZURE LIVE · READ ONLY", "live");
+        if (status === "disconnected") setDataSource("AZURE · DISCONNECTED", "error");
+        if (status === "error") setDataSource("AZURE · MESSAGE REJECTED", "error");
+      },
+    );
+  } catch {
+    activeSource = "local";
+    setDataSource("LOCAL REPLAY · LIVE UNAVAILABLE", "error");
+    byId<HTMLElement>("mission-announcer").textContent = "Azure live mode could not connect. Continuing with the deterministic local replay.";
+  }
+}
 
 setInterval(() => {
   byId<HTMLElement>("utc-clock").textContent = new Date().toISOString().slice(11, 19);
@@ -524,5 +700,9 @@ function animationLoop(now: number): void {
 controller = ingestLocalReading(controller, currentReadings, 0);
 updateDisplay(telemetryWithControllerCommands(currentReadings, controller.decision.commands));
 requestAnimationFrame(animationLoop);
+void initializeDataSource();
 
-window.addEventListener("beforeunload", () => scene.dispose());
+window.addEventListener("beforeunload", () => {
+  liveConnection?.close();
+  scene.dispose();
+});

@@ -92,6 +92,7 @@ export class HabitatScene {
   private animationFrame = 0;
   private disposed = false;
   private currentTelemetry: Telemetry | null = null;
+  private readonly reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
   constructor({ container, onSelect }: HabitatSceneOptions) {
     this.container = container;
@@ -104,6 +105,9 @@ export class HabitatScene {
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.renderer.domElement.setAttribute("aria-label", "Interactive three-dimensional ARES-7 habitat");
+    this.renderer.domElement.setAttribute("role", "img");
+    this.renderer.domElement.setAttribute("aria-describedby", "scene-keyboard-help");
+    this.renderer.domElement.tabIndex = 0;
     this.container.append(this.renderer.domElement);
 
     this.scene.background = new THREE.Color(0x160d0a);
@@ -126,6 +130,7 @@ export class HabitatScene {
     this.scene.add(this.storm);
 
     this.renderer.domElement.addEventListener("pointerup", this.handlePointer);
+    this.renderer.domElement.addEventListener("keydown", this.handleKeyboard);
     this.resizeObserver = new ResizeObserver(this.resize);
     this.resizeObserver.observe(this.container);
     this.resize();
@@ -433,6 +438,13 @@ export class HabitatScene {
     }
   };
 
+  private readonly handleKeyboard = (event: KeyboardEvent): void => {
+    if (event.key.toLowerCase() === "r") {
+      event.preventDefault();
+      this.resetView();
+    }
+  };
+
   private readonly resize = (): void => {
     const width = Math.max(1, this.container.clientWidth);
     const height = Math.max(1, this.container.clientHeight);
@@ -445,12 +457,14 @@ export class HabitatScene {
     if (this.disposed) return;
     const elapsed = this.clock.getElapsedTime();
     const speed = 0.03 + (this.currentTelemetry?.dustOpacityPercent ?? 4) / 900;
-    this.storm.position.x = (elapsed * speed * 25) % 18;
-    this.storm.rotation.y = elapsed * 0.006;
+    if (!this.reduceMotion) {
+      this.storm.position.x = (elapsed * speed * 25) % 18;
+      this.storm.rotation.y = elapsed * 0.006;
+    }
 
     this.beaconLights.forEach((light, id) => {
       const offset = MODULES.findIndex((module) => module.id === id) * 0.7;
-      light.intensity = 1.3 + (Math.sin(elapsed * 2.2 + offset) + 1) * 0.45;
+      light.intensity = this.reduceMotion ? 1.75 : 1.3 + (Math.sin(elapsed * 2.2 + offset) + 1) * 0.45;
     });
 
     this.controls.update();
@@ -463,6 +477,7 @@ export class HabitatScene {
     cancelAnimationFrame(this.animationFrame);
     this.resizeObserver.disconnect();
     this.renderer.domElement.removeEventListener("pointerup", this.handlePointer);
+    this.renderer.domElement.removeEventListener("keydown", this.handleKeyboard);
     this.renderer.dispose();
   }
 }

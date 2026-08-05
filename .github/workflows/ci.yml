@@ -16,7 +16,7 @@ jobs:
   verify:
     name: Test and build
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
 
     steps:
       - name: Check out repository
@@ -43,6 +43,15 @@ jobs:
 
       - name: Run all tests and builds
         run: npm run verify
+
+      - name: Install Chromium for browser checks
+        run: npx playwright install chromium --with-deps --only-shell
+
+      - name: Verify desktop and mobile public demo
+        run: npm run test:e2e
+
+      - name: Verify Pages artifact boundary
+        run: npm run pages:validate
 
       - name: Build core Bicep
         run: az bicep build --file infra/main.bicep --outfile /tmp/ares7-core.json

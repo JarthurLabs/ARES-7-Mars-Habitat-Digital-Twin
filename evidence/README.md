@@ -22,7 +22,9 @@ evidence so a screenshot is never asked to prove more than it shows.
 | LOCAL-01 | Viewer renders its nominal local state | [`screenshots/ares7-nominal.png`](screenshots/ares7-nominal.png) | Verified local |
 | LOCAL-02 | Local automation pauses for a human decision | [`screenshots/ares7-human-approval-gate.png`](screenshots/ares7-human-approval-gate.png) | Verified local |
 | LOCAL-03 | Approval is followed by visible containment effects | [`screenshots/ares7-containment-active.png`](screenshots/ares7-containment-active.png) | Verified local |
-| TEST-01 | All 10 tests and both builds complete | [`logs/2026-07-31-local-verification.txt`](logs/2026-07-31-local-verification.txt) | Verified local |
+| LOCAL-04 | Desktop replay exposes coherent identity and the twin inspector at 1600×900 | [`screenshots/ares7-public-demo-desktop-20260805.png`](screenshots/ares7-public-demo-desktop-20260805.png) | Verified local |
+| LOCAL-05 | Replay fits 390×844 without horizontal overflow | [`screenshots/ares7-public-demo-mobile-20260805.png`](screenshots/ares7-public-demo-mobile-20260805.png) | Verified local |
+| TEST-01 | 70 unit, handler, failure-injection, and browser tests plus production builds complete | CI workflow and local verification | Verified local |
 | SIM-01 | Raw simulator emits 12 coherent, non-authorizing frames | [`telemetry/2026-07-31-dust-storm.ndjson`](telemetry/2026-07-31-dust-storm.ndjson) | Verified local |
 | AZ-00 | Tagged resource group and four core services exist | [`screenshots/ares7-azure-live-resource-table-20260731.jpg`](screenshots/ares7-azure-live-resource-table-20260731.jpg) | Verified Azure |
 | AZ-01 | Template proposed only seven expected cost-gated resources | [`logs/2026-07-31-azure-core-deployment.txt`](logs/2026-07-31-azure-core-deployment.txt) | Verified Azure preflight |
@@ -36,11 +38,13 @@ evidence so a screenshot is never asked to prove more than it shows.
 
 ## Local screenshot provenance
 
-The three 1600×900 screenshots were captured from the real local application
+The local screenshots were captured from the real application
 after fonts were bundled and after the scene metadata fix. They show
 `SCENE MODULES · 6 MODULES`, `dtmi:ares7:Habitat;1`, and the deterministic
 local simulator provenance. The approval and containment images were produced
 by advancing the actual UI through the drill rather than editing the display.
+The 5 August desktop and mobile captures came from the built static artifact;
+the desktop frame deliberately leaves the Power Control twin inspector open.
 
 The Azure captures show real Azure CLI output in Cloud Shell. Subscription,
 tenant, and personal identifiers are not present. The deployment record is a
@@ -54,9 +58,10 @@ concise redacted transcript; it is not raw credential-bearing output.
 npm run verify
 ```
 
-It covers three viewer tests, three simulator tests, four controller tests, the
-viewer production build, and a Functions build that emits only deployable
-source rather than compiled tests.
+It covers viewer and shared-controller unit tests, three simulator tests,
+Function handlers and failure injection, both production builds, and browser
+checks at 1600×900 and 390×844. The browser suite exercises keyboard-only
+inspection and the complete approval-to-containment path.
 
 `SIM-01` was generated through the actual `buildFrame` implementation with the
 fixed evidence run ID `00000000-0000-4000-8000-000000000007`. Dry-run mode does
