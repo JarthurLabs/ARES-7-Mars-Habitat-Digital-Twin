@@ -66,6 +66,21 @@ if (!liveScenario.includes("runIdPattern.test(scenarioRunId)")) {
   throw new Error("run-live-scenario.mjs must reject scenario IDs that the telemetry contract cannot ingest");
 }
 
+const deviceProvisioning = await readFile("scripts/azure/provision-device.mjs", "utf8");
+for (const required of [
+  '"connection-string"',
+  "deviceIdMatches:contains(connectionString",
+  "hasSharedAccessKey:contains(connectionString",
+  "hasSharedAccessKeyName:contains(connectionString",
+]) {
+  if (!deviceProvisioning.includes(required)) {
+    throw new Error(`provision-device.mjs lost secret-free credential check ${required}`);
+  }
+}
+if (deviceProvisioning.includes("authentication.type")) {
+  throw new Error("provision-device.mjs must not rely on the omitted list authentication.type field");
+}
+
 const sceneUpload = await readFile("scripts/azure/upload-scene-asset.mjs", "utf8");
 for (const required of [
   "upload-ares7-3d-scenes-bundle",
