@@ -1,6 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildFrame, payloadHashFor, SCENARIO_TICKS } from "../src/scenario.mjs";
+import {
+  APPROVAL_GATE_TICK,
+  buildFrame,
+  delayAfterTickSeconds,
+  payloadHashFor,
+  SCENARIO_TICKS,
+} from "../src/scenario.mjs";
 
 const runId = "00000000-0000-4000-8000-000000000007";
 const sample = "2026-07-31T00:00:00.000Z";
@@ -40,4 +46,11 @@ test("raw telemetry never assumes an unapproved controller action", () => {
   assert.ok(resolved.power.batteryChargePct >= 70);
   assert.ok(resolved.lifeSupport.oxygenReservePct >= 95);
   assert.ok(resolved.environment.solarIrradiancePct >= 75);
+});
+
+test("the live runner can hold tick four for approval without slowing every frame", () => {
+  assert.equal(APPROVAL_GATE_TICK, 4);
+  assert.equal(delayAfterTickSeconds(3, 20, 60), 20);
+  assert.equal(delayAfterTickSeconds(4, 20, 60), 60);
+  assert.equal(delayAfterTickSeconds(5, 20, 60), 20);
 });

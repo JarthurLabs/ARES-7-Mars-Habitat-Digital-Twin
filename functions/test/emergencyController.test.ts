@@ -75,8 +75,8 @@ function seed(): TwinRecord[] {
       priorityMode: false,
       lastActionId: "none",
     }),
-    twin("ares7-module-command", { ...stamp }),
-    twin("ares7-module-crew", { ...stamp }),
+    twin("ares7-module-command", { ...stamp, powerDemandKw: 8 }),
+    twin("ares7-module-crew", { ...stamp, powerDemandKw: 9 }),
     twin("ares7-module-lab", {
       ...stamp,
       operationalState: "NOMINAL",
@@ -235,11 +235,40 @@ describe("controller Function orchestration", () => {
         payloadHash: telemetry(2).payloadHash,
       },
     });
-    expect(broadcaster.messages.map((message) => message.state)).toEqual([
+    expect(broadcaster.messages.map((message) => message.controllerState)).toEqual([
       "STORM_WARNING",
       "POWER_CRITICAL",
       "LIFE_SUPPORT_RISK",
     ]);
+    expect(broadcaster.messages.at(-1)).toMatchObject({
+      source: "azure-live",
+      scenarioRunId: runId,
+      tick: 2,
+      snapshotVersion: `v2:${runId}:tick:2`,
+      controllerState: "LIFE_SUPPORT_RISK",
+      telemetry: {
+        missionSecond: 24,
+        phase: "degraded",
+        solarOutputKw: 8,
+        solarOutputPercent: 8,
+        batteryPercent: 50,
+        oxygenPercent: 20.1,
+        oxygenGeneratorOutputPercent: 40,
+        oxygenReservePercent: 80,
+        habitatPressureKpa: 99.8,
+        co2Ppm: 930,
+        dustOpacityPercent: 91,
+        commsLatencyMs: 180,
+        externalTemperatureC: -48,
+        crewLoadKw: 17,
+        lifeSupportLoadKw: 13,
+        nonessentialLoadKw: 13,
+        airlockSealed: false,
+        greenhouseIsolated: false,
+        loadSheddingActive: false,
+        emergencyBusActive: false,
+      },
+    });
   });
 
   it("rejects a clock that names the wrong immutable snapshot", async () => {

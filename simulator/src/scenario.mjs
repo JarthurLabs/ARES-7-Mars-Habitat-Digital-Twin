@@ -16,6 +16,11 @@ const FRAMES = [
 ];
 
 export const SCENARIO_TICKS = FRAMES.length;
+export const APPROVAL_GATE_TICK = 4;
+
+export function delayAfterTickSeconds(tick, intervalSeconds, approvalGateDelaySeconds) {
+  return tick === APPROVAL_GATE_TICK ? approvalGateDelaySeconds : intervalSeconds;
+}
 
 function canonicalJson(value) {
   if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;

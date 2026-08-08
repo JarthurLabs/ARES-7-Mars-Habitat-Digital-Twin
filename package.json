@@ -19,8 +19,27 @@
     "models:validate": "node scripts/validate-models.mjs",
     "secrets:check": "node scripts/check-secrets.mjs",
     "pages:validate": "node scripts/validate-pages-artifact.mjs",
+    "asset:export": "node scripts/3d/export-ares7-glb.mjs",
+    "asset:validate": "node scripts/3d/validate-glb.mjs",
+    "asset:test": "node --test scripts/3d/segmented-glb.test.mjs",
+    "asset:scene:export": "node scripts/3d/export-scene-configuration.mjs",
+    "asset:scene:validate": "node scripts/3d/validate-scene-configuration.mjs",
+    "asset:scene:test": "node --test scripts/3d/scene-configuration.test.mjs scripts/3d/studio-loader-ids.test.mjs scripts/azure/upload-scene-asset.test.mjs scripts/azure/validate-scene-bundle-evidence.test.mjs",
+    "azure:guards:validate": "node scripts/validate-azure-guards.mjs && node scripts/validate-day6.mjs && node --test scripts/azure/evidence-browser-runtime.test.mjs scripts/azure/provision-device.test.mjs scripts/azure/verify-live.test.mjs scripts/azure/wire-events.test.mjs",
+    "azure:preflight": "node scripts/azure/preflight.mjs",
+    "azure:package:functions": "node scripts/azure/package-functions.mjs",
+    "azure:deploy:integration": "node scripts/azure/deploy-integration.mjs",
+    "azure:deploy:functions": "node scripts/azure/zip-deploy-functions.mjs",
+    "azure:bootstrap:graph": "node scripts/azure/bootstrap-graph.mjs",
+    "azure:provision:device": "node scripts/azure/provision-device.mjs",
+    "azure:wire:events": "node scripts/azure/wire-events.mjs",
+    "azure:upload:scene": "node scripts/azure/upload-scene-asset.mjs",
+    "azure:run:scenario": "node scripts/azure/run-live-scenario.mjs",
+    "azure:approve:containment": "node scripts/azure/approve-containment.mjs",
+    "azure:verify:live": "node scripts/azure/verify-live.mjs",
+    "day6:validate": "npm run azure:guards:validate && npm run asset:test && npm run asset:validate && npm run asset:scene:test && npm run asset:scene:validate",
     "evidence:capture": "npm run build && node scripts/capture-demo-evidence.mjs",
-    "verify": "npm run models:validate && npm run secrets:check && npm run test:all && npm run build:all"
+    "verify": "npm run models:validate && npm run secrets:check && npm run day6:validate && npm run test:all && npm run build:all"
   },
   "dependencies": {
     "@ares7/controller-core": "file:packages/controller-core",
@@ -29,8 +48,14 @@
     "three": "^0.185.1"
   },
   "devDependencies": {
+    "@babylonjs/core": "5.11.0",
+    "@babylonjs/loaders": "5.11.0",
+    "@hyperjump/json-schema": "1.17.8",
     "@playwright/test": "1.62.1",
+    "@sparticuz/chromium": "149.0.0",
     "@types/three": "^0.185.3",
+    "playwright-core-ares7": "npm:playwright-core@1.61.1",
+    "tar-fs": "3.1.3",
     "typescript": "^7.0.2",
     "vite": "^8.2.0",
     "vitest": "^4.1.10"

@@ -24,6 +24,7 @@ evidence so a screenshot is never asked to prove more than it shows.
 | LOCAL-03 | Approval is followed by visible containment effects | [`screenshots/ares7-containment-active.png`](screenshots/ares7-containment-active.png) | Verified local |
 | LOCAL-04 | Desktop replay exposes coherent identity and the twin inspector at 1600×900 | [`screenshots/ares7-public-demo-desktop-20260805.png`](screenshots/ares7-public-demo-desktop-20260805.png) | Verified local |
 | LOCAL-05 | Replay fits 390×844 without horizontal overflow | [`screenshots/ares7-public-demo-mobile-20260805.png`](screenshots/ares7-public-demo-mobile-20260805.png) | Verified local |
+| LOCAL-06 | Generated 3D Scenes v1.0.0 configuration maps 10 stable GLB nodes to 10 base ADT twin IDs and 4 behaviors to real DTDL properties | [`../models/3d/3DScenesConfiguration.json`](../models/3d/3DScenesConfiguration.json), pinned Microsoft schema, local validation tests | Verified local only |
 | TEST-01 | 70 unit, handler, simulator, and failure-injection tests plus 6 browser tests and production builds complete | CI workflow and local verification | Verified local |
 | SIM-01 | Raw simulator emits 12 coherent, non-authorizing frames | [`telemetry/2026-07-31-dust-storm.ndjson`](telemetry/2026-07-31-dust-storm.ndjson) | Verified local |
 | AZ-00 | Tagged resource group and four core services exist | [`screenshots/ares7-azure-live-resource-table-20260731.jpg`](screenshots/ares7-azure-live-resource-table-20260731.jpg) | Verified Azure |
@@ -35,6 +36,7 @@ evidence so a screenshot is never asked to prove more than it shows.
 | AZ-06 | Approval changes `PENDING` into containment | Before/after twin JSON and approval output | Pending |
 | AZ-07 | Actual spend remains inside the envelope | Redacted Cost Analysis export | Pending |
 | AZ-08 | Lab resource group is removed | Post-cleanup `group exists=false` evidence | Pending |
+| AZ-09 | Private 3D Scenes bundle loads and responds to live ADT state in Studio | Studio Builder/Viewer capture, post-save configuration, blob digests, and no-anonymous-access setting | Pending |
 
 ## Local screenshot provenance
 
