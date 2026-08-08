@@ -25,7 +25,7 @@
     "asset:scene:export": "node scripts/3d/export-scene-configuration.mjs",
     "asset:scene:validate": "node scripts/3d/validate-scene-configuration.mjs",
     "asset:scene:test": "node --test scripts/3d/scene-configuration.test.mjs scripts/3d/studio-loader-ids.test.mjs scripts/azure/upload-scene-asset.test.mjs",
-    "azure:guards:validate": "node scripts/validate-azure-guards.mjs && node scripts/validate-day6.mjs && node --test scripts/azure/provision-device.test.mjs scripts/azure/wire-events.test.mjs",
+    "azure:guards:validate": "node scripts/validate-azure-guards.mjs && node scripts/validate-day6.mjs && node --test scripts/azure/provision-device.test.mjs scripts/azure/verify-live.test.mjs scripts/azure/wire-events.test.mjs",
     "azure:preflight": "node scripts/azure/preflight.mjs",
     "azure:package:functions": "node scripts/azure/package-functions.mjs",
     "azure:deploy:integration": "node scripts/azure/deploy-integration.mjs",

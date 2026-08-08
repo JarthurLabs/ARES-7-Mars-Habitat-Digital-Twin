@@ -131,4 +131,23 @@ for (const required of [
   }
 }
 
+const liveVerification = await readFile("scripts/azure/verify-live.mjs", "utf8");
+for (const required of [
+  "ares7-device-telemetry-to-ingest",
+  "ares7-twin-updates-to-controller",
+  "Microsoft.EventGrid/systemTopics",
+  "Microsoft.EventGrid/topics",
+  '"--source-resource-id"',
+  '"--include-full-endpoint-url"',
+  '"--include-attrib-secret"',
+  "assertExactEventSubscription",
+]) {
+  if (!liveVerification.includes(required)) {
+    throw new Error(`verify-live.mjs lost exact secret-free Event Grid check ${required}`);
+  }
+}
+if (/"event-subscription",\s*"list"/.test(liveVerification)) {
+  throw new Error("verify-live.mjs must not list Event Grid subscriptions without an exact source ID");
+}
+
 console.log("validated Day 6 event filters, live settings, and guarded Azure write entry points");
