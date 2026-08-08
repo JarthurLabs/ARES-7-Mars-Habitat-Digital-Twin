@@ -124,7 +124,10 @@ if (eventWiringPath) {
   }
   for (const subscription of eventSubscriptions) {
     const destination = subscription.properties?.destination;
-    const retry = subscription.properties?.retryPolicy;
+    const retryReference = subscription.properties?.retryPolicy;
+    const retry = retryReference === "[variables('retryPolicy')]"
+      ? eventWiring.variables?.retryPolicy
+      : retryReference;
     const deadLetter = subscription.properties?.deadLetterWithResourceIdentity;
     if (destination?.endpointType !== "AzureFunction" || destination.properties?.maxEventsPerBatch !== 1) {
       throw new Error("every event subscription must deliver single events to an Azure Function");
