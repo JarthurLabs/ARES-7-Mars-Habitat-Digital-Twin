@@ -91,6 +91,9 @@ for (const required of [
   '"--overwrite",\n    "false"',
   "validateAres7SceneConfiguration",
   "SCENE_CONFIGURATION_BLOB_NAME",
+  "contentLength:properties.contentLength",
+  "metadataValue(existing.metadata, \"schemaVersion\"",
+  "after upload plan sha256=",
 ]) {
   if (!sceneUpload.includes(required)) {
     throw new Error(`upload-scene-asset.mjs lost private bundle control ${required}`);
@@ -100,6 +103,29 @@ for (const forbidden of ["generate-sas", "--account-key", "--sas-token", "--publ
   if (sceneUpload.includes(forbidden)) {
     throw new Error(`upload-scene-asset.mjs contains forbidden storage option ${forbidden}`);
   }
+}
+
+const sceneBundleEvidence = await readFile(
+  "scripts/azure/validate-scene-bundle-evidence.mjs",
+  "utf8",
+);
+for (const required of [
+  "ARES7_PRIVATE_SCENE_BUNDLE_VERIFIED",
+  "downloadedBytes.equals(localBytes)",
+  'metadata.get("sha256") === localDigest',
+  "contentLength === localBytes.length",
+  '["properties", "publicAccess"]',
+]) {
+  if (!sceneBundleEvidence.includes(required)) {
+    throw new Error(
+      `validate-scene-bundle-evidence.mjs lost exact private bundle proof ${required}`,
+    );
+  }
+}
+if (/runAzure|storage blob download/.test(sceneBundleEvidence)) {
+  throw new Error(
+    "validate-scene-bundle-evidence.mjs must remain a pure validator over captured evidence",
+  );
 }
 
 const eventWiringScript = await readFile("scripts/azure/wire-events.mjs", "utf8");

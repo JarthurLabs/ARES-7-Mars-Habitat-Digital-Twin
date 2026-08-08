@@ -33,10 +33,19 @@ function runGuardedUpload(fakeMode = "missing") {
   writeFileSync(
     fakeAz,
     `#!/usr/bin/env node
-import { appendFileSync } from "node:fs";
+import { appendFileSync, existsSync, readFileSync } from "node:fs";
 const args = process.argv.slice(2);
-appendFileSync(process.env.ARES7_FAKE_AZ_LOG, JSON.stringify(args) + "\\n");
+const log = process.env.ARES7_FAKE_AZ_LOG;
+const previousCalls = existsSync(log)
+  ? readFileSync(log, "utf8").trim().split("\\n").filter(Boolean).map(JSON.parse)
+  : [];
+appendFileSync(log, JSON.stringify(args) + "\\n");
 const mode = process.env.ARES7_FAKE_AZ_MODE;
+const argument = (call, name) => call[call.indexOf(name) + 1];
+const priorUpload = (name) => [...previousCalls].reverse().find(
+  (call) => call[0] === "storage" && call[1] === "blob" && call[2] === "upload" &&
+    argument(call, "--name") === name,
+);
 if (args[0] === "account" && args[1] === "show") {
   console.log(process.env.ARES7_SUBSCRIPTION_ID);
 } else if (args[0] === "resource" && args[1] === "list") {
@@ -49,9 +58,38 @@ if (args[0] === "account" && args[1] === "show") {
     minimumTlsVersion: "TLS1_2"
   }));
 } else if (args[0] === "storage" && args[1] === "blob" && args[2] === "exists") {
-  console.log(mode === "conflict" ? "true" : "false");
+  const uploaded = priorUpload(argument(args, "--name"));
+  console.log(mode === "conflict" || (uploaded && mode !== "post-missing") ? "true" : "false");
 } else if (args[0] === "storage" && args[1] === "blob" && args[2] === "show") {
-  console.log(JSON.stringify({ metadata: { sha256: "wrong" }, contentType: "application/json" }));
+  const name = argument(args, "--name");
+  const upload = priorUpload(name);
+  if (mode === "conflict" || !upload) {
+    console.log(JSON.stringify({
+      metadata: { sha256: "wrong" },
+      contentType: "application/json",
+      contentLength: 1
+    }));
+  } else {
+    const metadataStart = upload.indexOf("--metadata") + 1;
+    const metadataEnd = upload.indexOf("--output", metadataStart);
+    const metadata = Object.fromEntries(
+      upload.slice(metadataStart, metadataEnd).map((pair) => {
+        const separator = pair.indexOf("=");
+        return [pair.slice(0, separator), pair.slice(separator + 1)];
+      }),
+    );
+    if (mode === "post-corrupt" && name === "ares7-habitat-segmented.glb") {
+      metadata.sha256 = "0".repeat(64);
+    }
+    if (mode === "post-schema" && name === "3DScenesConfiguration.json") {
+      metadata.schemaVersion = "v0.0.0";
+    }
+    console.log(JSON.stringify({
+      metadata,
+      contentType: argument(upload, "--content-type"),
+      contentLength: readFileSync(argument(upload, "--file")).length
+    }));
+  }
 } else if (args[0] === "storage" && args[1] === "blob" && args[2] === "upload") {
   // The test inspects argv after the guarded script exits.
 } else {
@@ -108,11 +146,21 @@ describe("guarded 3D Scenes bundle upload", () => {
       assert.equal(args[args.indexOf("--subscription") + 1], subscriptionId);
     }
     const firstUpload = calls.findIndex((args) => args[2] === "upload");
+    const lastUpload = calls.findLastIndex((args) => args[2] === "upload");
     const existenceChecks = calls
       .map((args, index) => ({ args, index }))
       .filter(({ args }) => args[2] === "exists");
-    assert.equal(existenceChecks.length, 2);
-    assert(existenceChecks.every(({ index }) => index < firstUpload));
+    assert.equal(existenceChecks.length, 4);
+    assert.equal(existenceChecks.filter(({ index }) => index < firstUpload).length, 2);
+    assert.equal(existenceChecks.filter(({ index }) => index > lastUpload).length, 2);
+    const postUploadShows = calls.filter(
+      (args, index) => args[2] === "show" && index > lastUpload,
+    );
+    assert.equal(postUploadShows.length, 2);
+    assert.match(
+      result.stdout,
+      /verified private 3DScenesConfiguration\.json after upload plan/,
+    );
   });
 
   it("fails before blob operations when anonymous account access is allowed", () => {
@@ -127,5 +175,23 @@ describe("guarded 3D Scenes bundle upload", () => {
     assert.equal(result.status, 1);
     assert.match(result.stderr, /refusing to overwrite it/);
     assert(!calls.some((args) => args[2] === "upload"));
+  });
+
+  it("fails when a newly uploaded blob cannot be read back", () => {
+    const { result } = runGuardedUpload("post-missing");
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /was not readable after the upload plan completed/);
+  });
+
+  it("fails when Azure reads back different SHA-256 metadata", () => {
+    const { result } = runGuardedUpload("post-corrupt");
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /expected SHA-256 metadata/);
+  });
+
+  it("fails when Azure reads back the wrong configuration schema version", () => {
+    const { result } = runGuardedUpload("post-schema");
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /without schemaVersion v1\.0\.0/);
   });
 });

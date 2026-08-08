@@ -64,6 +64,21 @@ function verifyPrivateStorageAccount(scope, storageName) {
   }
 }
 
+function metadataValue(metadata, expectedKey, blobName) {
+  if (metadata === null || typeof metadata !== "object" || Array.isArray(metadata)) {
+    throw new Error(`${blobName} metadata is missing from Azure`);
+  }
+  const matches = Object.entries(metadata).filter(
+    ([key]) => key.toLowerCase() === expectedKey.toLowerCase(),
+  );
+  if (matches.length !== 1) {
+    throw new Error(
+      `${blobName} must have exactly one case-insensitive ${expectedKey} metadata value`,
+    );
+  }
+  return matches[0][1];
+}
+
 function inspectBlob(scope, storageName, artifact) {
   const exists = runAzure(
     scope,
@@ -103,9 +118,9 @@ function inspectBlob(scope, storageName, artifact) {
     "--auth-mode",
     "login",
     "--query",
-    "{metadata:metadata,contentType:properties.contentSettings.contentType}",
+    "{metadata:metadata,contentType:properties.contentSettings.contentType,contentLength:properties.contentLength}",
   ]);
-  if (existing?.metadata?.sha256 !== artifact.digest) {
+  if (metadataValue(existing?.metadata, "sha256", artifact.blobName) !== artifact.digest) {
     throw new Error(
       `${artifact.blobName} already exists without the expected SHA-256 metadata; refusing to overwrite it`,
     );
@@ -113,6 +128,20 @@ function inspectBlob(scope, storageName, artifact) {
   if (existing.contentType !== artifact.contentType) {
     throw new Error(
       `${artifact.blobName} already exists with content type ${existing.contentType}; expected ${artifact.contentType}`,
+    );
+  }
+  if (existing.contentLength !== artifact.byteLength) {
+    throw new Error(
+      `${artifact.blobName} already exists with content length ${String(existing.contentLength)}; expected ${artifact.byteLength}`,
+    );
+  }
+  if (
+    artifact.schemaVersion &&
+    metadataValue(existing.metadata, "schemaVersion", artifact.blobName) !==
+      artifact.schemaVersion
+  ) {
+    throw new Error(
+      `${artifact.blobName} already exists without schemaVersion ${artifact.schemaVersion}; refusing to overwrite it`,
     );
   }
   return true;
@@ -184,12 +213,14 @@ try {
       file: asset,
       contentType: "model/gltf-binary",
       digest: createHash("sha256").update(assetBytes).digest("hex"),
+      byteLength: assetBytes.length,
     },
     {
       blobName: SCENE_CONFIGURATION_BLOB_NAME,
       file: configurationFile,
       contentType: "application/json",
       digest: createHash("sha256").update(configurationBytes).digest("hex"),
+      byteLength: configurationBytes.length,
       schemaVersion: SCENES_SCHEMA_VERSION,
     },
   ];
@@ -206,6 +237,14 @@ try {
     }
     uploadBlob(scope, storageName, artifact);
     console.log(`uploaded private ${artifact.blobName} sha256=${artifact.digest}`);
+  }
+  for (const { artifact } of uploadPlan) {
+    if (!inspectBlob(scope, storageName, artifact)) {
+      throw new Error(`${artifact.blobName} was not readable after the upload plan completed`);
+    }
+    console.log(
+      `verified private ${artifact.blobName} after upload plan sha256=${artifact.digest}`,
+    );
   }
 } catch (error) {
   handleFailure(error);
