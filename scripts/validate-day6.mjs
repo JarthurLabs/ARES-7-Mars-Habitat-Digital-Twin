@@ -103,9 +103,19 @@ for (const forbidden of ["generate-sas", "--account-key", "--sas-token", "--publ
 }
 
 const eventWiringScript = await readFile("scripts/azure/wire-events.mjs", "utf8");
-for (const required of ["endpointReadyAttempts", "provisioningState", "did not become ready"]) {
+for (const required of [
+  '"endpoint",\n    "wait"',
+  '"--created"',
+  '"--interval"',
+  '"--timeout"',
+]) {
   if (!eventWiringScript.includes(required)) {
     throw new Error(`wire-events.mjs lost endpoint readiness control ${required}`);
+  }
+}
+for (const forbidden of ["provisioningState", '"endpoint",\n      "delete"']) {
+  if (eventWiringScript.includes(forbidden)) {
+    throw new Error(`wire-events.mjs contains forbidden endpoint operation ${forbidden}`);
   }
 }
 
