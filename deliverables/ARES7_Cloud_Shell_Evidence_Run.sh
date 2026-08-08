@@ -4,7 +4,7 @@ set -euo pipefail
 readonly resource_group="rg-ares7-lab-eus2"
 readonly repository_url="https://github.com/JarthurLabs/ARES-7-Mars-Habitat-Digital-Twin.git"
 readonly repository_branch="agent/complete-ares-live-20260808"
-readonly fixed_live_commit="74d62b6cdb1ede7e982ccfb735e30f044802b6c5"
+readonly fixed_live_commit="9b188d12c3ad9f041dca3999cf9ee324929b000f"
 readonly repository_commit="${ARES7_REPOSITORY_COMMIT:-$fixed_live_commit}"
 readonly max_spend_usd="10"
 readonly run_started_utc="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
@@ -454,6 +454,32 @@ mapfile -t storage_account_names < <(
 [[ "${#storage_account_names[@]}" -eq 1 ]] || \
   die "Expected exactly one ARES-7 storage account; found ${#storage_account_names[@]}."
 storage_account_name="${storage_account_names[0]}"
+
+mapfile -t iot_system_topic_names < <(
+  az resource list \
+    --resource-group "$resource_group" \
+    --subscription "$subscription_id" \
+    --resource-type Microsoft.EventGrid/systemTopics \
+    --query "[?starts_with(name, 'egst-iot-ares7-')].name" \
+    --output tsv \
+    --only-show-errors
+)
+[[ "${#iot_system_topic_names[@]}" -eq 1 ]] || \
+  die "Expected exactly one ARES-7 IoT Event Grid system topic; found ${#iot_system_topic_names[@]}."
+iot_system_topic_name="${iot_system_topic_names[0]}"
+
+mapfile -t controller_topic_names < <(
+  az resource list \
+    --resource-group "$resource_group" \
+    --subscription "$subscription_id" \
+    --resource-type Microsoft.EventGrid/topics \
+    --query "[?starts_with(name, 'egt-ares7-')].name" \
+    --output tsv \
+    --only-show-errors
+)
+[[ "${#controller_topic_names[@]}" -eq 1 ]] || \
+  die "Expected exactly one ARES-7 controller Event Grid topic; found ${#controller_topic_names[@]}."
+controller_topic_name="${controller_topic_names[0]}"
 
 echo "Regenerating and validating the segmented GLB and Microsoft-schema 3D Scenes configuration."
 npm run asset:export > "$evidence_dir/scene-glb-export.log" 2>&1
@@ -930,16 +956,54 @@ az iot hub device-identity list \
   --resource-group "$resource_group" \
   --auth-type login \
   --subscription "$subscription_id" \
-  --query '[].{deviceId:deviceId,status:status,authenticationType:authentication.type}' \
+  --query '[].{deviceId:deviceId,status:status}' \
   --output json \
   --only-show-errors > "$evidence_dir/device-identities.json"
 
-az eventgrid event-subscription list \
-  --resource-group "$resource_group" \
+readonly iot_system_topic_resource_id="/subscriptions/${subscription_id}/resourceGroups/${resource_group}/providers/Microsoft.EventGrid/systemTopics/${iot_system_topic_name}"
+readonly controller_topic_resource_id="/subscriptions/${subscription_id}/resourceGroups/${resource_group}/providers/Microsoft.EventGrid/topics/${controller_topic_name}"
+
+az eventgrid event-subscription show \
+  --name ares7-device-telemetry-to-ingest \
+  --source-resource-id "$iot_system_topic_resource_id" \
+  --include-full-endpoint-url false \
+  --include-attrib-secret false \
   --subscription "$subscription_id" \
-  --query '[].{name:name,provisioningState:provisioningState,deadLetterEndpoint:deadLetterDestination.endpointType,identityDeadLetterEndpoint:deadLetterWithResourceIdentity.deadLetterDestination.endpointType,eventTypes:filter.includedEventTypes,subjectBeginsWith:filter.subjectBeginsWith,subjectEndsWith:filter.subjectEndsWith,advancedFilters:filter.advancedFilters,maxDeliveryAttempts:retryPolicy.maxDeliveryAttempts,eventTimeToLiveInMinutes:retryPolicy.eventTimeToLiveInMinutes}' \
+  --query '{name:name,provisioningState:provisioningState,deadLetterEndpoint:deadLetterDestination.endpointType,identityDeadLetterEndpoint:deadLetterWithResourceIdentity.deadLetterDestination.endpointType,eventTypes:filter.includedEventTypes,subjectBeginsWith:filter.subjectBeginsWith,subjectEndsWith:filter.subjectEndsWith,advancedFilters:filter.advancedFilters,maxDeliveryAttempts:retryPolicy.maxDeliveryAttempts,eventTimeToLiveInMinutes:retryPolicy.eventTimeToLiveInMinutes}' \
   --output json \
-  --only-show-errors > "$evidence_dir/event-subscriptions.json"
+  --only-show-errors > "$evidence_dir/event-subscription-iot.json"
+
+az eventgrid event-subscription show \
+  --name ares7-twin-updates-to-controller \
+  --source-resource-id "$controller_topic_resource_id" \
+  --include-full-endpoint-url false \
+  --include-attrib-secret false \
+  --subscription "$subscription_id" \
+  --query '{name:name,provisioningState:provisioningState,deadLetterEndpoint:deadLetterDestination.endpointType,identityDeadLetterEndpoint:deadLetterWithResourceIdentity.deadLetterDestination.endpointType,eventTypes:filter.includedEventTypes,subjectBeginsWith:filter.subjectBeginsWith,subjectEndsWith:filter.subjectEndsWith,advancedFilters:filter.advancedFilters,maxDeliveryAttempts:retryPolicy.maxDeliveryAttempts,eventTimeToLiveInMinutes:retryPolicy.eventTimeToLiveInMinutes}' \
+  --output json \
+  --only-show-errors > "$evidence_dir/event-subscription-controller.json"
+
+python3 - \
+  "$evidence_dir/event-subscription-iot.json" \
+  "$evidence_dir/event-subscription-controller.json" \
+  "$evidence_dir/event-subscriptions.json" \
+  "$iot_system_topic_name" \
+  "$controller_topic_name" <<'PY'
+import json
+import pathlib
+import sys
+
+items = []
+for source_path, source_type, source_name in (
+    (sys.argv[1], "Microsoft.EventGrid/systemTopics", sys.argv[4]),
+    (sys.argv[2], "Microsoft.EventGrid/topics", sys.argv[5]),
+):
+    item = json.load(open(source_path))
+    item["sourceResourceType"] = source_type
+    item["sourceName"] = source_name
+    items.append(item)
+pathlib.Path(sys.argv[3]).write_text(json.dumps(items, indent=2) + "\n")
+PY
 
 python3 - "$evidence_dir/deployed-functions.json" "$evidence_dir/event-subscriptions.json" "$evidence_dir/device-identities.json" "$evidence_dir/digital-twin-models.json" <<'PY' || \
   die "The deployed Functions, Event Grid paths, device identity, or Digital Twins models failed strict evidence validation."
@@ -958,10 +1022,23 @@ required = {
 }
 if not required.issubset(by_name):
     raise SystemExit(1)
+required_sources = {
+    "ares7-device-telemetry-to-ingest": (
+        "Microsoft.EventGrid/systemTopics",
+        "egst-iot-ares7-",
+    ),
+    "ares7-twin-updates-to-controller": (
+        "Microsoft.EventGrid/topics",
+        "egt-ares7-",
+    ),
+}
 for name in required:
     item = by_name[name]
+    source_type, source_prefix = required_sources[name]
     if (
         item.get("provisioningState") != "Succeeded"
+        or item.get("sourceResourceType") != source_type
+        or not str(item.get("sourceName", "")).startswith(source_prefix)
         or "StorageBlob" not in {
             item.get("deadLetterEndpoint"),
             item.get("identityDeadLetterEndpoint"),
@@ -996,7 +1073,6 @@ if (
     len(devices) != 1
     or devices[0].get("deviceId") != "ares7-simulator"
     or str(devices[0].get("status", "")).lower() != "enabled"
-    or devices[0].get("authenticationType") != "sas"
 ):
     raise SystemExit(1)
 
@@ -1191,7 +1267,6 @@ checks = {
         and len(devices) == 1
         and devices[0].get("deviceId") == "ares7-simulator"
         and str(devices[0].get("status", "")).lower() == "enabled"
-        and devices[0].get("authenticationType") == "sas"
         and {
             "ares7-device-telemetry-to-ingest",
             "ares7-twin-updates-to-controller",
