@@ -19,7 +19,7 @@ var baseName = '${toLower(namePrefix)}-${suffix}'
 var deadLetterContainerName = 'event-dead-letter'
 var controllerEndpointName = 'ares7-controller-topic'
 var controllerRouteName = 'ares7-controller-updates'
-var controllerRouteFilter = "type = 'Microsoft.DigitalTwins.Twin.Update' AND (subject = 'ares7-clock' OR subject = 'ares7-habitat')"
+var controllerRouteFilter = 'type = ''Microsoft.DigitalTwins.Twin.Update'' AND (subject = ''ares7-clock'' OR subject = ''ares7-habitat'')'
 var retryPolicy = {
   eventTimeToLiveInMinutes: 60
   maxDeliveryAttempts: 10
