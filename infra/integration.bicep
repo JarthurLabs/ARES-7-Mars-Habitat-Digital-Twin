@@ -280,8 +280,8 @@ resource functionMonitoringRole 'Microsoft.Authorization/roleAssignments@2022-04
 }
 
 resource eventGridDeadLetterRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(deadLetterContainer.id, eventGridIdentity.id, storageBlobDataContributorRoleId)
-  scope: deadLetterContainer
+  name: guid(storage.id, eventGridIdentity.id, storageBlobDataContributorRoleId)
+  scope: storage
   properties: {
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', storageBlobDataContributorRoleId)
     principalId: eventGridIdentity.properties.principalId

@@ -26,7 +26,7 @@ for (const required of [
   "AZURE_WEBPUBSUB_HUB: 'ares7'",
   "VIEWER_ALLOWED_ORIGINS",
   "https://jarthurlabs.github.io",
-  "scope: deadLetterContainer",
+  "scope: storage",
 ]) {
   if (!integration.includes(required)) throw new Error(`integration.bicep lost ${required}`);
 }

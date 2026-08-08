@@ -71,6 +71,7 @@ resource controllerEndpoint 'Microsoft.DigitalTwins/digitalTwinsInstances/endpoi
   parent: digitalTwins
   name: controllerEndpointName
   properties: {
+    authenticationType: 'KeyBased'
     endpointType: 'EventGrid'
     TopicEndpoint: controllerTopic.properties.endpoint
     accessKey1: controllerTopic.listKeys().key1
