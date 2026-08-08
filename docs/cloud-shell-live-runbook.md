@@ -107,30 +107,59 @@ The Azure Digital Twins endpoint is an ARM resource in Bicep. Its event route is
 a data-plane object, so the guarded script creates it after the template and
 refuses to replace a route with drift.
 
-## 4. Upload the optional segmented GLB
+## 4. Upload the optional private 3D Scenes bundle
 
-Generate and validate the original asset first:
+Generate and validate the original asset and offline configuration first. The
+checked-in configuration targets the storage account recorded by the existing
+core-deployment evidence. If the current deployment output names a different
+`stares7*` account, regenerate it with that exact name.
 
 ```bash
 npm run asset:export
 npm run asset:test
 npm run asset:validate
+npm run asset:scene:export -- stares7j6vhj3eh4zuie
+npm run asset:scene:test
+npm run asset:scene:validate
 ```
 
-Upload it with Microsoft Entra authentication. The command never makes the
-container public and refuses to overwrite an existing blob with a different
-SHA-256 digest.
+The generated `3DScenesConfiguration.json` uses Microsoft's published v1.0.0
+schema (JSON Schema draft 2020-12). Local validation also proves that its ten
+elements reference the ten stable GLB nodes and base-graph twin IDs, and that
+its four behaviors reference real DTDL properties. This is offline evidence;
+it does not prove Studio can render the configuration.
+
+Upload both files with Microsoft Entra authentication. The command keeps all
+of the normal exact-subscription, exact-resource-group, live-milestone, and
+maximum-$10 guards. It additionally requires the storage account to disable
+anonymous blob and Shared Key access, default to OAuth, and require TLS 1.2.
+It uploads only missing blobs and refuses to overwrite any existing blob that
+lacks the expected SHA-256 metadata, so it cannot silently replace a
+Studio-created configuration.
 
 ```bash
-export ARES7_CONFIRM_SCENE_UPLOAD=upload-ares7-habitat-segmented.glb
+export ARES7_CONFIRM_SCENE_UPLOAD=upload-ares7-3d-scenes-bundle
 npm run azure:upload:scene
 unset ARES7_CONFIRM_SCENE_UPLOAD
 ```
 
-The GLB has stable, separate mesh names. Create the scene, element mappings, and
-behaviors in 3D Scenes Studio itself. Do not present the GLB as a configured
-Studio scene until that Studio-generated configuration and live behavior have
-been captured.
+Microsoft recommends using the Studio builder instead of manually editing the
+configuration blob. Treat the guarded direct upload as a provisional evidence
+candidate only. In the real 3D Scenes Studio UI, connect the exact ADT instance
+and private `ares7-3d-scenes` container, then capture genuine proof that:
+
+- `ARES-7 Mars Habitat` opens without configuration or asset errors;
+- all ten elements select the intended GLB mesh and resolve their primary twin;
+- the Operations layer exposes all four behaviors;
+- habitat, subsystem, isolation, and airlock visuals change from live twin data;
+- the habitat popover shows state, alarm, operator decision, and controller
+  action; and
+- the pending approval and post-approval containment states are visible during
+  the same identified live run.
+
+Preserve the actual `3DScenesConfiguration.json` downloaded after any Studio
+save, its SHA-256, the no-anonymous-access account setting, and the uncropped
+Studio capture. Do not present the generated JSON alone as Studio UI proof.
 
 ## 5. Run telemetry and preserve the human gate
 
@@ -188,3 +217,4 @@ parameters, the public page remains deterministic local replay.
 - [Event Grid system-topic subscription Bicep schema](https://learn.microsoft.com/en-us/azure/templates/microsoft.eventgrid/2022-06-15/systemtopics/eventsubscriptions)
 - [Flex Consumption Function Apps](https://learn.microsoft.com/en-us/azure/azure-functions/flex-consumption-how-to)
 - [Azure Digital Twins 3D Scenes Studio](https://learn.microsoft.com/en-us/azure/digital-twins/how-to-use-3d-scenes-studio)
+- [Microsoft 3D Scenes configuration schema v1.0.0](https://github.com/microsoft/iot-cardboard-js/blob/263f5ddc496b0b7ab1a9b837764f786e1e2e54e1/schemas/3DScenesConfiguration/v1.0.0/3DScenesConfiguration.schema.json)

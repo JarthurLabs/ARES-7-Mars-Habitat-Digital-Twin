@@ -117,7 +117,7 @@ graph, and implementation status.
 | Azure event path | **Pending** | Functions, Event Grid, RBAC, graph upload, and device identity are not yet live |
 | Static public replay | Workflow ready; repository Pages setting still needs enabling | Validated `dist`-only workflow and artifact guard |
 | Web PubSub browser adapter | Optional and read-only | UI defaults to `LOCAL REPLAY`; live mode needs a short-lived receive-only negotiate URL |
-| Azure 3D Scenes Studio asset | Planned | Current scene is procedural Three.js |
+| Azure 3D Scenes Studio bundle | GLB and schema-valid configuration verified offline; Studio proof pending | 10 stable node/twin mappings and 4 data-driven behaviors |
 
 The core deployment is genuine Azure state and is preserved in redacted CLI
 captures and a deployment record. It proves the resource and SKU boundary; it
@@ -190,7 +190,9 @@ pending until their evidence is present.
 The lab template permits public service endpoints to keep the first deployment
 understandable and inexpensive. It has not undergone penetration, load,
 availability, or disaster-recovery testing. The procedural Three.js habitat is
-separate from a future Azure 3D Scenes Studio asset.
+separate from the generated Azure 3D Scenes Studio bundle. Offline schema and
+mapping validation does not prove that Studio has loaded the private blobs or
+rendered live twin behavior.
 
 ## Repository map
 

@@ -66,6 +66,27 @@ if (!liveScenario.includes("runIdPattern.test(scenarioRunId)")) {
   throw new Error("run-live-scenario.mjs must reject scenario IDs that the telemetry contract cannot ingest");
 }
 
+const sceneUpload = await readFile("scripts/azure/upload-scene-asset.mjs", "utf8");
+for (const required of [
+  "upload-ares7-3d-scenes-bundle",
+  "allowBlobPublicAccess !== false",
+  "allowSharedKeyAccess !== false",
+  "defaultToOAuthAuthentication !== true",
+  '"--auth-mode",\n      "login"',
+  '"--overwrite",\n    "false"',
+  "validateAres7SceneConfiguration",
+  "SCENE_CONFIGURATION_BLOB_NAME",
+]) {
+  if (!sceneUpload.includes(required)) {
+    throw new Error(`upload-scene-asset.mjs lost private bundle control ${required}`);
+  }
+}
+for (const forbidden of ["generate-sas", "--account-key", "--sas-token", "--public-access"]) {
+  if (sceneUpload.includes(forbidden)) {
+    throw new Error(`upload-scene-asset.mjs contains forbidden storage option ${forbidden}`);
+  }
+}
+
 const eventWiringScript = await readFile("scripts/azure/wire-events.mjs", "utf8");
 for (const required of ["endpointReadyAttempts", "provisioningState", "did not become ready"]) {
   if (!eventWiringScript.includes(required)) {
