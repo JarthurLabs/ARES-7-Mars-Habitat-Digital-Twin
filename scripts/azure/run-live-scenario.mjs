@@ -119,9 +119,14 @@ try {
       IOTHUB_DEVICE_CONNECTION_STRING: connectionString,
       ARES7_SCENARIO_RUN_ID: scenarioRunId,
       ARES7_INTERVAL_SECONDS: process.env.ARES7_INTERVAL_SECONDS ?? "12",
+      ARES7_DUPLICATE_TICK: process.env.ARES7_DUPLICATE_TICK ?? "11",
+      ARES7_DUPLICATE_DELAY_SECONDS:
+        process.env.ARES7_DUPLICATE_DELAY_SECONDS ?? process.env.ARES7_INTERVAL_SECONDS ?? "12",
     },
   });
-  console.log(`completed telemetry send for scenario ${scenarioRunId}; the device credential was never exported or printed`);
+  console.log(
+    `completed 12 telemetry frames plus one exact duplicate for scenario ${scenarioRunId}; the device credential was never exported or printed`,
+  );
 } catch (error) {
   handleFailure(error);
 }

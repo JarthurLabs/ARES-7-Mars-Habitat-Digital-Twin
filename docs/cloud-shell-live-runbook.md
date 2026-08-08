@@ -145,6 +145,11 @@ npm run azure:run:scenario
 unset ARES7_CONFIRM_SCENARIO
 ```
 
+The guarded command sends 12 distinct frames and then resends tick 11 with the
+same timestamp and payload hash. The live verification must therefore show 12
+immutable snapshots while the ingestion logs or delivery metrics show the 13th
+successful delivery as an idempotent duplicate.
+
 Wait until the habitat is `LIFE_SUPPORT_RISK` with an operator decision of
 `PENDING`. In the second tab, explicitly approve the proposed containment:
 
