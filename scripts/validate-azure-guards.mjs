@@ -1,5 +1,9 @@
 import assert from "node:assert/strict";
-import { expectedResourceGroup, validateScope } from "./azure/common.mjs";
+import {
+  expectedResourceGroup,
+  requireExactConfirmation,
+  validateScope,
+} from "./azure/common.mjs";
 
 const subscriptionId = "11111111-1111-4111-8111-111111111111";
 const base = {
@@ -42,6 +46,21 @@ assert.deepEqual(
     "write",
   ),
   { resourceGroup: expectedResourceGroup, subscriptionId },
+);
+
+assert.doesNotThrow(() =>
+  requireExactConfirmation(
+    { ARES7_CONFIRM_EVENT_WIRING: `wire-${expectedResourceGroup}` },
+    "ARES7_CONFIRM_EVENT_WIRING",
+    `wire-${expectedResourceGroup}`,
+  ),
+);
+assert.throws(() =>
+  requireExactConfirmation(
+    { ARES7_CONFIRM_EVENT_WIRING: "yes" },
+    "ARES7_CONFIRM_EVENT_WIRING",
+    `wire-${expectedResourceGroup}`,
+  ),
 );
 assert.throws(() => validateScope(base, "cleanup"));
 assert.throws(() =>

@@ -2,13 +2,14 @@ import {
   assertAzureAccount,
   handleFailure,
   run,
+  runAzure,
   validateScope,
 } from "./common.mjs";
 
 try {
   const scope = validateScope(process.env, "read");
   assertAzureAccount(scope);
-  run("az", [
+  runAzure(scope, [
     "group",
     "show",
     "--name",
@@ -32,12 +33,21 @@ try {
     "--outfile",
     "/tmp/ares7-integration.json",
   ]);
+  run("az", [
+    "bicep",
+    "build",
+    "--file",
+    "infra/event-wiring.bicep",
+    "--outfile",
+    "/tmp/ares7-event-wiring.json",
+  ]);
   run("node", [
     "scripts/validate-infra.mjs",
     "/tmp/ares7-core.json",
     "/tmp/ares7-integration.json",
+    "/tmp/ares7-event-wiring.json",
   ]);
-  run("az", [
+  runAzure(scope, [
     "deployment",
     "group",
     "validate",
@@ -48,7 +58,7 @@ try {
     "--parameters",
     "enableEventWiring=false",
   ]);
-  run("az", [
+  runAzure(scope, [
     "deployment",
     "group",
     "what-if",

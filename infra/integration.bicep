@@ -21,6 +21,12 @@ param environment string = 'development'
 ])
 param enableEventWiring bool = false
 
+@description('Exact browser Origin allowed to request a receive-only Web PubSub grant.')
+@allowed([
+  'https://jarthurlabs.github.io'
+])
+param viewerAllowedOrigins string = 'https://jarthurlabs.github.io'
+
 var suffix = uniqueString(subscription().subscriptionId, resourceGroup().id)
 var baseName = '${toLower(namePrefix)}-${suffix}'
 var deploymentContainerName = 'function-packages'
@@ -206,7 +212,9 @@ resource functionApp 'Microsoft.Web/sites@2024-04-01' = {
       APPLICATIONINSIGHTS_AUTHENTICATION_STRING: 'ClientId=${functionIdentity.properties.clientId};Authorization=AAD'
       AZURE_CLIENT_ID: functionIdentity.properties.clientId
       AZURE_DIGITAL_TWINS_ENDPOINT: 'https://${digitalTwins.properties.hostName}'
-      WEB_PUBSUB_SERVICE_CLIENT_ENDPOINT: 'https://${webPubSub.properties.hostName}'
+      AZURE_WEBPUBSUB_ENDPOINT: 'https://${webPubSub.properties.hostName}'
+      AZURE_WEBPUBSUB_HUB: 'ares7'
+      VIEWER_ALLOWED_ORIGINS: viewerAllowedOrigins
     }
   }
 }
@@ -272,8 +280,8 @@ resource functionMonitoringRole 'Microsoft.Authorization/roleAssignments@2022-04
 }
 
 resource eventGridDeadLetterRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(storage.id, eventGridIdentity.id, storageBlobDataContributorRoleId)
-  scope: storage
+  name: guid(deadLetterContainer.id, eventGridIdentity.id, storageBlobDataContributorRoleId)
+  scope: deadLetterContainer
   properties: {
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', storageBlobDataContributorRoleId)
     principalId: eventGridIdentity.properties.principalId

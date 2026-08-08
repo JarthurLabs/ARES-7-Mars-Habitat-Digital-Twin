@@ -253,33 +253,89 @@ function habitatUpdate(
   };
 }
 
+function numericProperty(record: TwinRecord, name: string): number {
+  const value = record.properties[name];
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    throw new SnapshotIntegrityError(`${record.id}.${name} is not a finite number.`);
+  }
+  return value;
+}
+
+function phaseFor(state: ControllerState):
+  | "nominal"
+  | "watch"
+  | "storm"
+  | "degraded"
+  | "containment"
+  | "recovery" {
+  if (state === "NOMINAL") return "nominal";
+  if (state === "STORM_WARNING") return "watch";
+  if (state === "POWER_CRITICAL") return "storm";
+  if (state === "LIFE_SUPPORT_RISK") return "degraded";
+  if (state === "CONTAINMENT") return "containment";
+  return "recovery";
+}
+
 async function authoritativeMessage(store: TwinStore, habitat: TwinRecord): Promise<Readonly<Record<string, unknown>>> {
-  const [lab, greenhouse, airlock, battery, lifeSupport] = await Promise.all([
+  const runId = stringValue(habitat.properties.scenarioRunId, "");
+  const tick = integerValue(habitat.properties.lastProcessedTick, -1);
+  if (!runId || tick < 0) throw new SnapshotIntegrityError("The habitat does not identify a processed snapshot.");
+  const snapshotId = snapshotTwinId(runId, tick);
+  const snapshot = snapshotTelemetry(requireTwin(await store.getTwin(snapshotId), snapshotId), runId, tick);
+  const [command, crew, lab, greenhouse, airlock, battery, lifeSupport] = await Promise.all([
+    store.getTwin("ares7-module-command"),
+    store.getTwin("ares7-module-crew"),
     store.getTwin("ares7-module-lab"),
     store.getTwin("ares7-module-greenhouse"),
     store.getTwin("ares7-airlock-main"),
     store.getTwin("ares7-battery-alpha"),
     store.getTwin("ares7-life-support"),
   ]);
+  const requiredCommand = requireTwin(command, "ares7-module-command");
+  const requiredCrew = requireTwin(crew, "ares7-module-crew");
+  const requiredLab = requireTwin(lab, "ares7-module-lab");
+  const requiredGreenhouse = requireTwin(greenhouse, "ares7-module-greenhouse");
+  const requiredAirlock = requireTwin(airlock, "ares7-airlock-main");
+  const requiredBattery = requireTwin(battery, "ares7-battery-alpha");
+  const requiredLifeSupport = requireTwin(lifeSupport, "ares7-life-support");
+  const controllerState = stringValue<ControllerState>(habitat.properties.operationalState, "NOMINAL");
+  const loadSheddingActive = requiredBattery.properties.nonCriticalLoadShed === true;
+  const lifeSupportPriority = requiredLifeSupport.properties.priorityMode === true;
   return {
-    type: "ares7.controllerSnapshot",
+    source: "azure-live",
     actionId: habitat.properties.lastActionId,
-    scenarioRunId: habitat.properties.scenarioRunId,
-    tick: habitat.properties.lastProcessedTick,
-    snapshotVersion: habitat.properties.snapshotVersion,
-    payloadHash: habitat.properties.payloadHash,
-    state: habitat.properties.operationalState,
+    scenarioRunId: snapshot.scenarioRunId,
+    tick: snapshot.tick,
+    snapshotVersion: snapshot.snapshotVersion,
+    payloadHash: snapshot.payloadHash,
+    controllerState,
     alarmLevel: habitat.properties.alarmLevel,
     action: habitat.properties.controllerAction,
     operatorDecision: habitat.properties.operatorDecision,
-    controls: {
-      isolateLab: lab?.properties.isolated === true,
-      isolateGreenhouse: greenhouse?.properties.isolated === true,
-      sealAirlock: airlock?.properties.sealed === true,
-      shedNonCriticalLoad: battery?.properties.nonCriticalLoadShed === true,
-      prioritizeLifeSupport: lifeSupport?.properties.priorityMode === true,
-      energizeEmergencyBus:
-        battery?.properties.nonCriticalLoadShed === true || lifeSupport?.properties.priorityMode === true,
+    telemetry: {
+      // The cloud sender runs every 12 seconds; simulatedMinute remains available
+      // in the immutable snapshot while this field drives the existing viewer timeline.
+      missionSecond: snapshot.tick * 12,
+      phase: phaseFor(controllerState),
+      solarOutputKw: snapshot.power.solarOutputKw,
+      solarOutputPercent: snapshot.power.solarOutputPct,
+      batteryPercent: snapshot.power.batteryChargePct,
+      oxygenPercent: snapshot.lifeSupport.cabinOxygenPct,
+      oxygenGeneratorOutputPercent: snapshot.lifeSupport.oxygenGeneratorOutputPct,
+      oxygenReservePercent: snapshot.lifeSupport.oxygenReservePct,
+      habitatPressureKpa: snapshot.lifeSupport.habitatPressureKPa,
+      co2Ppm: snapshot.lifeSupport.co2Ppm,
+      dustOpacityPercent: snapshot.environment.dustOpacityPct,
+      commsLatencyMs: 180,
+      externalTemperatureC: snapshot.environment.externalTemperatureC,
+      crewLoadKw: numericProperty(requiredCommand, "powerDemandKw") + numericProperty(requiredCrew, "powerDemandKw"),
+      lifeSupportLoadKw: snapshot.lifeSupport.allocatedPowerKw,
+      nonessentialLoadKw:
+        numericProperty(requiredLab, "powerDemandKw") + numericProperty(requiredGreenhouse, "powerDemandKw"),
+      airlockSealed: requiredAirlock.properties.sealed === true,
+      greenhouseIsolated: requiredGreenhouse.properties.isolated === true,
+      loadSheddingActive,
+      emergencyBusActive: loadSheddingActive || lifeSupportPriority,
     },
   };
 }
