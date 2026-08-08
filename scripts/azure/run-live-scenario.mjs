@@ -127,6 +127,8 @@ try {
       ARES7_DUPLICATE_TICK: process.env.ARES7_DUPLICATE_TICK ?? "11",
       ARES7_DUPLICATE_DELAY_SECONDS:
         process.env.ARES7_DUPLICATE_DELAY_SECONDS ?? process.env.ARES7_INTERVAL_SECONDS ?? "12",
+      ARES7_APPROVAL_GATE_DELAY_SECONDS:
+        process.env.ARES7_APPROVAL_GATE_DELAY_SECONDS ?? process.env.ARES7_INTERVAL_SECONDS ?? "12",
     },
   });
   console.log(

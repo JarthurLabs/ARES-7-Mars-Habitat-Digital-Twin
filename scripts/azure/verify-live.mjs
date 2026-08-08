@@ -19,6 +19,8 @@ const eventSubscriptions = [
   {
     sourceResourceType: "Microsoft.EventGrid/systemTopics",
     sourceNamePrefix: "egst-iot-ares7-",
+    topicCommand: "system-topic",
+    topicNameFlag: "--system-topic-name",
     name: "ares7-device-telemetry-to-ingest",
     functionName: "ingestTelemetry",
     includedEventTypes: ["Microsoft.Devices.DeviceTelemetry"],
@@ -29,6 +31,8 @@ const eventSubscriptions = [
   {
     sourceResourceType: "Microsoft.EventGrid/topics",
     sourceNamePrefix: "egt-ares7-",
+    topicCommand: "topic",
+    topicNameFlag: "--topic-name",
     name: "ares7-twin-updates-to-controller",
     functionName: "emergencyController",
     includedEventTypes: ["Microsoft.DigitalTwins.Twin.Update"],
@@ -154,17 +158,17 @@ try {
       expected.sourceResourceType,
       expected.sourceNamePrefix,
     );
-    const sourceResourceId =
-      `/subscriptions/${scope.subscriptionId}/resourceGroups/${scope.resourceGroup}` +
-      `/providers/${expected.sourceResourceType}/${sourceName}`;
     const actual = runAzureJson(scope, [
       "eventgrid",
+      expected.topicCommand,
       "event-subscription",
       "show",
       "--name",
       expected.name,
-      "--source-resource-id",
-      sourceResourceId,
+      "--resource-group",
+      scope.resourceGroup,
+      expected.topicNameFlag,
+      sourceName,
       "--include-full-endpoint-url",
       "false",
       "--include-attrib-secret",

@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { setTimeout as wait } from "node:timers/promises";
 import iotDevice from "azure-iot-device";
 import mqttTransport from "azure-iot-device-mqtt";
-import { buildFrame, SCENARIO_TICKS } from "./scenario.mjs";
+import { buildFrame, delayAfterTickSeconds, SCENARIO_TICKS } from "./scenario.mjs";
 
 const { Client, Message } = iotDevice;
 const { Mqtt } = mqttTransport;
@@ -19,6 +19,9 @@ const duplicateTick = process.env.ARES7_DUPLICATE_TICK === undefined
 const duplicateDelaySeconds = Number(
   process.env.ARES7_DUPLICATE_DELAY_SECONDS ?? intervalSeconds,
 );
+const approvalGateDelaySeconds = Number(
+  process.env.ARES7_APPROVAL_GATE_DELAY_SECONDS ?? intervalSeconds,
+);
 
 if (!Number.isFinite(intervalSeconds) || intervalSeconds < 0) {
   throw new Error("Interval must be a non-negative number of seconds.");
@@ -31,6 +34,9 @@ if (
 }
 if (!Number.isFinite(duplicateDelaySeconds) || duplicateDelaySeconds < 0) {
   throw new Error("ARES7_DUPLICATE_DELAY_SECONDS must be a non-negative number of seconds.");
+}
+if (!Number.isFinite(approvalGateDelaySeconds) || approvalGateDelaySeconds < 0) {
+  throw new Error("ARES7_APPROVAL_GATE_DELAY_SECONDS must be a non-negative number of seconds.");
 }
 
 const scenarioRunId = process.env.ARES7_SCENARIO_RUN_ID || randomUUID();
@@ -68,8 +74,9 @@ try {
     const frame = buildFrame(tick, scenarioRunId, new Date().toISOString());
     frames.push(frame);
     await sendFrame(frame);
-    if (tick < SCENARIO_TICKS - 1 && intervalSeconds > 0) {
-      await wait(intervalSeconds * 1000);
+    const delaySeconds = delayAfterTickSeconds(tick, intervalSeconds, approvalGateDelaySeconds);
+    if (tick < SCENARIO_TICKS - 1 && delaySeconds > 0) {
+      await wait(delaySeconds * 1000);
     }
   }
   if (duplicateTick !== undefined) {

@@ -209,6 +209,11 @@ when it is HTTPS, has no credentials or custom port, uses an exact
 `azurewebsites.net` hostname, and ends at `/api/viewer/negotiate`. With no query
 parameters, the public page remains deterministic local replay.
 
+The guarded evidence capture serves the pinned local `dist` bundle beneath an
+intercepted Pages origin so the exact production Origin policy is exercised. Its
+JSON records `captureMode=local-pinned-dist-under-intercepted-pages-origin`; it
+does not claim that GitHub Pages served that bundle.
+
 ## Microsoft references
 
 - [Azure Digital Twins endpoints and event routes](https://learn.microsoft.com/en-us/azure/digital-twins/concepts-route-events)

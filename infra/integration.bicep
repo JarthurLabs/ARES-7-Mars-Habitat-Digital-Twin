@@ -21,7 +21,7 @@ param environment string = 'development'
 ])
 param enableEventWiring bool = false
 
-@description('Exact browser Origin allowed to request a receive-only Web PubSub grant.')
+@description('Exact browser Origin allowed to request a short-lived viewer grant with no group publish or join roles.')
 @allowed([
   'https://jarthurlabs.github.io'
 ])

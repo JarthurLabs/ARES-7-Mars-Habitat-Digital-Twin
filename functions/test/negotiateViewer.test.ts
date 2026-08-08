@@ -45,7 +45,7 @@ describe("viewer negotiate Function", () => {
     expect((await handler(null)(request(), context)).status).toBe(503);
   });
 
-  it("issues a five-minute URL with no data roles", async () => {
+  it("issues a five-minute read-only UI URL with no group roles", async () => {
     const getClientAccessToken = vi.fn(async () => ({
       url: "wss://example.webpubsub.azure.com/client/hubs/ares7?access_token=redacted",
     }));
@@ -55,7 +55,8 @@ describe("viewer negotiate Function", () => {
     expect(response.jsonBody).toEqual({
       url: expect.stringContaining("wss://"),
       expiresAt: "2026-08-05T02:05:00.000Z",
-      permissions: "receive-only",
+      accessMode: "read-only-ui",
+      roles: [],
     });
     expect(getClientAccessToken).toHaveBeenCalledWith({
       userId: "viewer-test-id",

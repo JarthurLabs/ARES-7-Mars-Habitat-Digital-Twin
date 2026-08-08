@@ -137,7 +137,10 @@ for (const required of [
   "ares7-twin-updates-to-controller",
   "Microsoft.EventGrid/systemTopics",
   "Microsoft.EventGrid/topics",
-  '"--source-resource-id"',
+  'topicCommand: "system-topic"',
+  'topicCommand: "topic"',
+  '"--system-topic-name"',
+  '"--topic-name"',
   '"--include-full-endpoint-url"',
   '"--include-attrib-secret"',
   "assertExactEventSubscription",
@@ -147,7 +150,10 @@ for (const required of [
   }
 }
 if (/"event-subscription",\s*"list"/.test(liveVerification)) {
-  throw new Error("verify-live.mjs must not list Event Grid subscriptions without an exact source ID");
+  throw new Error("verify-live.mjs must show each Event Grid subscription through its exact topic");
+}
+if (liveVerification.includes('"--source-resource-id"')) {
+  throw new Error("verify-live.mjs must use the dedicated Event Grid topic read commands");
 }
 
 console.log("validated Day 6 event filters, live settings, and guarded Azure write entry points");

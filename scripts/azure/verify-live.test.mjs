@@ -67,11 +67,20 @@ if (args[0] === "account" && args[1] === "show") {
   console.log(JSON.stringify(["ingestTelemetry", "emergencyController", "negotiateViewer"]));
 } else if (args[0] === "functionapp" && args[1] === "list") {
   // The Function App table is diagnostic and intentionally contains no secrets.
-} else if (args[0] === "eventgrid" && args[1] === "event-subscription" && args[2] === "show") {
-  const sourceId = args[args.indexOf("--source-resource-id") + 1];
+} else if (
+  args[0] === "eventgrid" &&
+  ["system-topic", "topic"].includes(args[1]) &&
+  args[2] === "event-subscription" &&
+  args[3] === "show"
+) {
   const name = args[args.indexOf("--name") + 1];
-  const isTelemetry = sourceId.endsWith("/systemTopics/" + systemTopicName);
-  if (mode === "missing" && !isTelemetry) {
+  const isTelemetry = args[1] === "system-topic";
+  const topicFlag = isTelemetry ? "--system-topic-name" : "--topic-name";
+  const expectedTopicName = isTelemetry ? systemTopicName : controllerTopicName;
+  if (args[args.indexOf(topicFlag) + 1] !== expectedTopicName) {
+    console.error("event subscription used the wrong dedicated topic scope");
+    process.exitCode = 4;
+  } else if (mode === "missing" && !isTelemetry) {
     console.error("event subscription was not found");
     process.exitCode = 3;
   } else {
@@ -144,32 +153,33 @@ appendFileSync(process.env.ARES7_FAKE_CALL_LOG, JSON.stringify(["npm", ...proces
 }
 
 describe("live Azure path verification", () => {
-  it("shows both exact Event Grid subscriptions through their exact source resource IDs", () => {
+  it("shows both exact Event Grid subscriptions through their dedicated topic commands", () => {
     const { calls, result } = runLiveVerification();
     assert.equal(result.status, 0, result.stderr);
     const eventCalls = calls.filter(
-      ([command, group, resource]) =>
-        command === "az" && group === "eventgrid" && resource === "event-subscription",
+      (call) => call[0] === "az" && call[1] === "eventgrid" && call.includes("event-subscription"),
     );
     assert.equal(eventCalls.length, 2);
-    assert(eventCalls.every((call) => call[3] === "show"));
+    assert.deepEqual(eventCalls.map((call) => call[2]), ["system-topic", "topic"]);
+    assert(eventCalls.every((call) => call[4] === "show"));
     assert.deepEqual(
       eventCalls.map((call) => call[call.indexOf("--name") + 1]),
       ["ares7-device-telemetry-to-ingest", "ares7-twin-updates-to-controller"],
     );
     assert.deepEqual(
-      eventCalls.map((call) => call[call.indexOf("--source-resource-id") + 1]),
       [
-        `/subscriptions/${subscriptionId}/resourceGroups/${expectedResourceGroup}/providers/Microsoft.EventGrid/systemTopics/${systemTopicName}`,
-        `/subscriptions/${subscriptionId}/resourceGroups/${expectedResourceGroup}/providers/Microsoft.EventGrid/topics/${controllerTopicName}`,
+        eventCalls[0][eventCalls[0].indexOf("--system-topic-name") + 1],
+        eventCalls[1][eventCalls[1].indexOf("--topic-name") + 1],
       ],
+      [systemTopicName, controllerTopicName],
     );
     for (const call of eventCalls) {
       assert.equal(call[call.indexOf("--include-full-endpoint-url") + 1], "false");
       assert.equal(call[call.indexOf("--include-attrib-secret") + 1], "false");
       assert.equal(call[call.indexOf("--subscription") + 1], subscriptionId);
+      assert.equal(call[call.indexOf("--resource-group") + 1], expectedResourceGroup);
       assert(!call.includes("list"));
-      assert(!call.includes("--resource-group"));
+      assert(!call.includes("--source-resource-id"));
     }
     assert(calls.some(([command]) => command === "npm"));
   });

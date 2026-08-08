@@ -116,7 +116,7 @@ graph, and implementation status.
 | Azure core services | **Deployed** | Digital Twins, IoT Hub F1, Web PubSub Free_F1, and Standard LRS Storage |
 | Azure event path | **Pending** | Functions, Event Grid, RBAC, graph upload, and device identity are not yet live |
 | Static public replay | Workflow ready; repository Pages setting still needs enabling | Validated `dist`-only workflow and artifact guard |
-| Web PubSub browser adapter | Optional and read-only | UI defaults to `LOCAL REPLAY`; live mode needs a short-lived receive-only negotiate URL |
+| Web PubSub browser adapter | Optional read-only UI | UI defaults to `LOCAL REPLAY`; live mode uses a short-lived viewer URL with no group publish or join roles |
 | Azure 3D Scenes Studio bundle | GLB and schema-valid configuration verified offline; Studio proof pending | 10 stable node/twin mappings and 4 data-driven behaviors |
 
 The core deployment is genuine Azure state and is preserved in redacted CLI

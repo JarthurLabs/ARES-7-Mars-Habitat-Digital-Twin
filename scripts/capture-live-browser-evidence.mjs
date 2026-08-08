@@ -14,6 +14,7 @@ const scenarioRunId = process.env.ARES7_SCENARIO_RUN_ID?.trim();
 const pagesOrigin = "https://jarthurlabs.github.io";
 const pagesPath = "/ARES-7-Mars-Habitat-Digital-Twin/";
 const pagesUrl = new URL(pagesPath, pagesOrigin);
+const captureMode = "local-pinned-dist-under-intercepted-pages-origin";
 const functionHost = /^[a-z0-9](?:[a-z0-9-]{0,58}[a-z0-9])?\.azurewebsites\.net$/i;
 const runIdPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -92,16 +93,17 @@ const liveUrl = new URL(pagesUrl);
 liveUrl.searchParams.set("source", "azure");
 liveUrl.searchParams.set("negotiate", parsedNegotiateUrl.toString());
 const video = page.video();
+const expectedFinalSnapshotVersion = `v2:${scenarioRunId}:tick:11`;
 
 try {
-  await page.goto(liveUrl.toString(), { waitUntil: "networkidle" });
+  await page.goto(liveUrl.toString(), { waitUntil: "domcontentloaded" });
   await page.locator("#data-source-label").filter({ hasText: "AZURE LIVE · READ ONLY" }).waitFor({
     state: "visible",
     timeout: 120_000,
   });
   await writeFile(
     resolve(evidenceRoot, "browser-ready.json"),
-    `${JSON.stringify({ status: "connected-read-only", origin: pagesOrigin, capturedAtUtc: new Date().toISOString() }, null, 2)}\n`,
+    `${JSON.stringify({ status: "connected-read-only", accessMode: "read-only-ui", captureMode, origin: pagesOrigin, capturedAtUtc: new Date().toISOString() }, null, 2)}\n`,
   );
 
   await page.waitForFunction(
@@ -115,11 +117,12 @@ try {
   });
 
   await page.waitForFunction(
-    (expectedRunId) =>
+    ({ expectedRunId, expectedSnapshotVersion }) =>
       document.querySelector("#run-id")?.textContent === expectedRunId &&
       document.querySelector("#run-tick")?.textContent === "11" &&
+      document.querySelector("#snapshot-version")?.textContent === expectedSnapshotVersion &&
       document.querySelector("#controller-state")?.textContent === "RESOLVED",
-    scenarioRunId,
+    { expectedRunId: scenarioRunId, expectedSnapshotVersion: expectedFinalSnapshotVersion },
     { timeout: 360_000 },
   );
   await page.screenshot({
@@ -134,9 +137,14 @@ try {
     snapshotVersion: document.querySelector("#snapshot-version")?.textContent,
     controllerState: document.querySelector("#controller-state")?.textContent,
   }));
+  if (browserState.snapshotVersion !== expectedFinalSnapshotVersion) {
+    throw new Error(
+      `Browser ended on snapshot ${String(browserState.snapshotVersion)}, expected ${expectedFinalSnapshotVersion}`,
+    );
+  }
   await writeFile(
     resolve(evidenceRoot, "browser-state.json"),
-    `${JSON.stringify({ ...browserState, origin: pagesOrigin, capturedAtUtc: new Date().toISOString() }, null, 2)}\n`,
+    `${JSON.stringify({ ...browserState, accessMode: "read-only-ui", captureMode, origin: pagesOrigin, capturedAtUtc: new Date().toISOString() }, null, 2)}\n`,
   );
 } finally {
   await writeFile(resolve(evidenceRoot, "browser-console.log"), `${browserMessages.join("\n")}\n`);
