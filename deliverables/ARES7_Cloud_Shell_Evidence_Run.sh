@@ -4,7 +4,7 @@ set -euo pipefail
 readonly resource_group="rg-ares7-lab-eus2"
 readonly repository_url="https://github.com/JarthurLabs/ARES-7-Mars-Habitat-Digital-Twin.git"
 readonly repository_branch="agent/complete-ares-live-20260808"
-readonly fixed_live_commit="9b188d12c3ad9f041dca3999cf9ee324929b000f"
+readonly fixed_live_commit="b2557883a3acff0d099c5c4f0cf08a54aef0f580"
 readonly repository_commit="${ARES7_REPOSITORY_COMMIT:-$fixed_live_commit}"
 readonly max_spend_usd="10"
 readonly run_started_utc="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
@@ -25,6 +25,7 @@ printf '%s\n' \
 subscription_id=""
 tenant_id=""
 account_user=""
+operator_object_id=""
 viewer_pid=""
 scenario_pid=""
 browser_pid=""
@@ -46,7 +47,7 @@ terminate_process_tree() {
 
 redact_evidence() {
   command -v python3 >/dev/null 2>&1 || return 0
-  python3 - "$evidence_dir" "${subscription_id:-}" "${tenant_id:-}" "${account_user:-}" <<'PY'
+  python3 - "$evidence_dir" "${subscription_id:-}" "${tenant_id:-}" "${account_user:-}" "${operator_object_id:-}" <<'PY'
 import pathlib
 import re
 import sys
@@ -305,6 +306,101 @@ limit = float(sys.argv[2])
 raise SystemExit(1 if currency == "USD" and isinstance(amount, (int, float)) and amount >= limit else 0)
 PY
 
+mapfile -t storage_account_names < <(
+  az resource list \
+    --resource-group "$resource_group" \
+    --subscription "$subscription_id" \
+    --resource-type Microsoft.Storage/storageAccounts \
+    --query "[?starts_with(name, 'stares7')].name" \
+    --output tsv \
+    --only-show-errors
+)
+[[ "${#storage_account_names[@]}" -eq 1 ]] || \
+  die "Expected exactly one ARES-7 storage account; found ${#storage_account_names[@]}."
+storage_account_name="${storage_account_names[0]}"
+
+# Blob data access is separate from Azure resource ownership. Assign only the
+# signed-in operator, only the built-in Blob Data Contributor role, and only
+# the existing private 3D Scenes container. The assignment is deterministic so
+# rerunning this evidence workflow remains idempotent.
+account_type="$(
+  az account show \
+    --subscription "$subscription_id" \
+    --query user.type \
+    --output tsv \
+    --only-show-errors
+)"
+case "${account_type,,}" in
+  user)
+    operator_object_id="$(
+      az ad signed-in-user show \
+        --query id \
+        --output tsv \
+        --only-show-errors
+    )"
+    operator_principal_type="User"
+    ;;
+  serviceprincipal)
+    operator_object_id="$(
+      az ad sp show \
+        --id "$account_user" \
+        --query id \
+        --output tsv \
+        --only-show-errors
+    )"
+    operator_principal_type="ServicePrincipal"
+    ;;
+  *)
+    die "The signed-in Azure account type cannot be safely resolved for the private scene upload."
+    ;;
+esac
+[[ "$operator_object_id" =~ ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$ ]] || \
+  die "Azure returned an invalid signed-in principal object identifier."
+
+readonly storage_blob_data_contributor_role_id="ba92f5b4-2d11-453d-a403-e96b0029c9fe"
+readonly scene_container_scope="/subscriptions/${subscription_id}/resourceGroups/${resource_group}/providers/Microsoft.Storage/storageAccounts/${storage_account_name}/blobServices/default/containers/ares7-3d-scenes"
+readonly operator_blob_role_assignment_id="$(python3 - "$scene_container_scope" "$operator_object_id" <<'PY'
+import sys
+import uuid
+print(uuid.uuid5(uuid.NAMESPACE_URL, f"ares7-operator-blob-role:{sys.argv[1].lower()}:{sys.argv[2].lower()}"))
+PY
+)"
+
+echo "Ensuring the signed-in operator has narrow Entra access to the private 3D Scenes container."
+scene_operator_role_status="narrow-role-required"
+for _attempt in 1 2 3; do
+  if existing_scene_container_name="$(
+    az storage container show \
+      --name ares7-3d-scenes \
+      --account-name "$storage_account_name" \
+      --auth-mode login \
+      --subscription "$subscription_id" \
+      --query name \
+      --output tsv \
+      --only-show-errors \
+      2> "$evidence_dir/scene-storage-initial-authorization.error.log"
+  )" && [[ "$existing_scene_container_name" == "ares7-3d-scenes" ]]; then
+    scene_operator_role_status="existing-data-access-verified"
+    : > "$evidence_dir/scene-operator-role-assignment.log"
+    break
+  fi
+  [[ "$_attempt" -eq 3 ]] || sleep 2
+done
+if [[ "$scene_operator_role_status" == "narrow-role-required" ]]; then
+  existing_assignment_id="$(
+    az role assignment list \
+      --scope "$scene_container_scope" \
+      --subscription "$subscription_id" \
+      --query "[?name == '$operator_blob_role_assignment_id'] | [0].id" \
+      --output tsv \
+      --only-show-errors
+  )"
+  if [[ -n "$existing_assignment_id" ]]; then
+    scene_operator_role_status="existing-narrow-role-assignment"
+    : > "$evidence_dir/scene-operator-role-assignment.log"
+  fi
+fi
+
 git clone --quiet --branch "$repository_branch" --single-branch "$repository_url" "$run_root/repository"
 cd "$run_root/repository"
 git checkout --quiet --detach "$repository_commit"
@@ -325,15 +421,85 @@ npm --prefix simulator ci --silent > "$evidence_dir/npm-simulator-install.log" 2
 npm --prefix functions ci --silent > "$evidence_dir/npm-functions-install.log" 2>&1
 npm run verify > "$evidence_dir/local-verification.log" 2>&1
 
+echo "Installing and smoke-testing the pinned headless Chromium build before Azure deployment writes."
+npx playwright install chromium --only-shell \
+  > "$evidence_dir/playwright-browser-install.log" 2>&1
+node --input-type=module - "$run_root/playwright-smoke" \
+  > "$evidence_dir/playwright-browser-smoke.log" 2>&1 <<'NODE'
+import { mkdir, stat } from "node:fs/promises";
+import { resolve } from "node:path";
+import { chromium } from "@playwright/test";
+
+const output = process.argv[2];
+await mkdir(output, { recursive: true });
+const browser = await chromium.launch({ headless: true });
+try {
+  const context = await browser.newContext({
+    viewport: { width: 640, height: 360 },
+    recordVideo: { dir: output, size: { width: 640, height: 360 } },
+  });
+  const page = await context.newPage();
+  const video = page.video();
+  await page.setContent('<canvas id="gl" width="640" height="360"></canvas>');
+  const webglAvailable = await page.evaluate(() => {
+    const canvas = document.querySelector("#gl");
+    return Boolean(canvas?.getContext("webgl2") || canvas?.getContext("webgl"));
+  });
+  if (!webglAvailable) throw new Error("headless Chromium did not provide WebGL");
+  await page.screenshot({ path: resolve(output, "smoke.png") });
+  await page.waitForTimeout(750);
+  await page.close();
+  await context.close();
+  if (!video) throw new Error("Playwright did not create a video artifact");
+  const videoPath = await video.path();
+  const [screenshotStat, videoStat] = await Promise.all([
+    stat(resolve(output, "smoke.png")),
+    stat(videoPath),
+  ]);
+  if (screenshotStat.size < 1_000 || videoStat.size < 1_000) {
+    throw new Error("Playwright smoke artifacts were unexpectedly empty");
+  }
+  console.log("Chromium launch, WebGL, screenshot, and video smoke passed");
+} finally {
+  await browser.close();
+}
+NODE
+
+if [[ "$scene_operator_role_status" == "narrow-role-required" ]]; then
+  echo "Assigning the signed-in operator narrow Entra access to the private 3D Scenes container."
+  az role assignment create \
+    --name "$operator_blob_role_assignment_id" \
+    --assignee-object-id "$operator_object_id" \
+    --assignee-principal-type "$operator_principal_type" \
+    --role "$storage_blob_data_contributor_role_id" \
+    --scope "$scene_container_scope" \
+    --subscription "$subscription_id" \
+    --output none \
+    --only-show-errors > "$evidence_dir/scene-operator-role-assignment.log" 2>&1
+  scene_operator_role_status="narrow-role-assigned"
+fi
+python3 - "$evidence_dir/scene-operator-role-status.json" "$scene_operator_role_status" <<'PY'
+import json
+import pathlib
+import sys
+pathlib.Path(sys.argv[1]).write_text(json.dumps({
+    "status": sys.argv[2],
+    "role": "Storage Blob Data Contributor",
+    "scope": "private ares7-3d-scenes container only",
+    "principal": "<redacted>",
+}, indent=2) + "\n")
+PY
+
 export ARES7_RESOURCE_GROUP="$resource_group"
 export ARES7_SUBSCRIPTION_ID="$subscription_id"
 export ARES7_MILESTONE="live-scenario"
 export ARES7_CONFIRM_WRITE="deploy-rg-ares7-lab-eus2"
 export ARES7_MAX_SPEND_USD="$max_spend_usd"
 export ARES7_SCENARIO_RUN_ID="$run_id"
-export ARES7_INTERVAL_SECONDS="12"
+export ARES7_INTERVAL_SECONDS="20"
 export ARES7_DUPLICATE_TICK="11"
-export ARES7_DUPLICATE_DELAY_SECONDS="12"
+export ARES7_DUPLICATE_DELAY_SECONDS="20"
+export ARES7_APPROVAL_GATE_DELAY_SECONDS="60"
 
 echo "Running the guarded Azure validation and What-If preflight."
 npm run azure:preflight > "$evidence_dir/azure-preflight.log" 2>&1
@@ -442,19 +608,6 @@ mapfile -t iot_hub_names < <(
   die "Expected exactly one ARES-7 IoT Hub; found ${#iot_hub_names[@]}."
 iot_hub_name="${iot_hub_names[0]}"
 
-mapfile -t storage_account_names < <(
-  az resource list \
-    --resource-group "$resource_group" \
-    --subscription "$subscription_id" \
-    --resource-type Microsoft.Storage/storageAccounts \
-    --query "[?starts_with(name, 'stares7')].name" \
-    --output tsv \
-    --only-show-errors
-)
-[[ "${#storage_account_names[@]}" -eq 1 ]] || \
-  die "Expected exactly one ARES-7 storage account; found ${#storage_account_names[@]}."
-storage_account_name="${storage_account_names[0]}"
-
 mapfile -t iot_system_topic_names < <(
   az resource list \
     --resource-group "$resource_group" \
@@ -494,6 +647,29 @@ node scripts/3d/validate-scene-configuration.mjs \
   2> "$evidence_dir/scene-configuration-validation.error.log"
 
 echo "Idempotently uploading the validated private 3D Scenes bundle with Entra authentication."
+scene_storage_access="false"
+for _attempt in $(seq 1 40); do
+  if scene_container_name="$(
+    az storage container show \
+      --name ares7-3d-scenes \
+      --account-name "$storage_account_name" \
+      --auth-mode login \
+      --subscription "$subscription_id" \
+      --query name \
+      --output tsv \
+      --only-show-errors \
+      2> "$evidence_dir/scene-storage-authorization.error.log"
+  )" && [[ "$scene_container_name" == "ares7-3d-scenes" ]]; then
+    scene_storage_access="true"
+    break
+  fi
+  if [[ "$_attempt" -lt 40 ]]; then
+    sleep 15
+  fi
+done
+[[ "$scene_storage_access" == "true" ]] || \
+  die "The narrow Blob Data Contributor assignment did not become usable within ten minutes."
+
 export ARES7_CONFIRM_SCENE_UPLOAD="upload-ares7-3d-scenes-bundle"
 npm run azure:upload:scene > "$evidence_dir/scene-bundle-upload.log" 2>&1
 unset ARES7_CONFIRM_SCENE_UPLOAD
@@ -511,7 +687,7 @@ az storage container show \
   --account-name "$storage_account_name" \
   --auth-mode login \
   --subscription "$subscription_id" \
-  --query '{name:name,publicAccess:properties.publicAccess,metadata:metadata}' \
+  --query '{name:name,publicAccess:publicAccess,metadata:metadata}' \
   --output json \
   --only-show-errors > "$evidence_dir/scene-container.json"
 
@@ -580,13 +756,12 @@ pathlib.Path(sys.argv[1]).write_text(json.dumps({
     "negotiateEndpoint": sys.argv[3],
     "publicViewerUrl": sys.argv[4],
     "credentialFree": True,
+    "accessMode": "read-only-ui",
+    "roles": [],
+    "captureMode": "local-pinned-dist-under-intercepted-pages-origin",
     "grantOrWebSocketUrlIncluded": False,
 }, indent=2) + "\n")
 PY
-
-echo "Installing the pinned headless Chromium build for browser evidence."
-npx playwright install chromium --only-shell \
-  > "$evidence_dir/playwright-browser-install.log" 2>&1
 
 export ARES7_LIVE_NEGOTIATE_URL="$live_negotiate_url"
 export ARES7_BROWSER_EVIDENCE_DIR="$evidence_dir/browser"
@@ -610,31 +785,24 @@ cat > "$run_root/live-viewer-listener.mjs" <<'NODE'
 import { writeFile } from "node:fs/promises";
 
 const [negotiateUrl, runId, outputPath, readyPath] = process.argv.slice(2);
-const response = await fetch(negotiateUrl, {
-  headers: { Origin: "https://jarthurlabs.github.io" },
-});
-if (!response.ok) throw new Error(`negotiate failed with HTTP ${response.status}`);
-const grant = await response.json();
-if (
-  grant.permissions !== "receive-only" ||
-  typeof grant.url !== "string" ||
-  !grant.url.startsWith("wss://")
-) {
-  throw new Error("negotiate response was not a receive-only Web PubSub grant");
-}
-
 const messages = [];
 let completed = false;
 let processing = Promise.resolve();
-const socket = new WebSocket(grant.url, "json.webpubsub.azure.v1");
+let socket;
+let reconnectTimer;
+let connectionAttempts = 0;
+const deadlineMs = Date.now() + 420_000;
 
 const persist = () =>
   writeFile(
     outputPath,
     `${JSON.stringify(
       {
-        permissions: "receive-only",
+        accessMode: "read-only-ui",
+        roles: [],
+        upstreamInterfaceExposed: false,
         scenarioRunId: runId,
+        connectionAttempts,
         messageCount: messages.length,
         messages,
       },
@@ -647,73 +815,110 @@ const timeout = setTimeout(() => {
   processing = processing.then(async () => {
     await persist();
     process.exitCode = 2;
-    socket.close(1000, "evidence timeout");
+    clearTimeout(reconnectTimer);
+    socket?.close(1000, "evidence timeout");
   });
-}, 300_000);
+}, 420_000);
 
-socket.addEventListener("open", async () => {
-  await writeFile(readyPath, `${new Date().toISOString()}\n`);
-});
+function scheduleReconnect() {
+  if (completed || process.exitCode || Date.now() >= deadlineMs) return;
+  clearTimeout(reconnectTimer);
+  reconnectTimer = setTimeout(connect, 2_000);
+}
 
-socket.addEventListener("message", (event) => {
-  processing = processing.then(async () => {
-    let envelope;
-    try {
-      envelope = JSON.parse(String(event.data));
-    } catch {
-      return;
-    }
-    if (envelope?.type !== "message" || envelope?.from !== "server") return;
-    let payload = envelope.data;
-    if (envelope.dataType !== "json") {
-      try {
-        payload = JSON.parse(String(envelope.data));
-      } catch {
-        return;
-      }
-    }
-    if (
-      payload?.source !== "azure-live" ||
-      payload?.scenarioRunId !== runId ||
-      !Number.isInteger(payload?.tick) ||
-      typeof payload?.snapshotVersion !== "string" ||
-      typeof payload?.controllerState !== "string"
-    ) {
-      return;
-    }
-    messages.push({
-      source: "azure-live",
-      actionId: payload.actionId,
-      scenarioRunId: payload.scenarioRunId,
-      tick: payload.tick,
-      snapshotVersion: payload.snapshotVersion,
-      controllerState: payload.controllerState,
-      operatorDecision: payload.operatorDecision,
-      action: payload.action,
-      receivedAtUtc: new Date().toISOString(),
-      transport: "Azure Web PubSub receive-only grant",
+async function connect() {
+  if (completed || process.exitCode || Date.now() >= deadlineMs) return;
+  connectionAttempts += 1;
+  try {
+    const response = await fetch(negotiateUrl, {
+      headers: { Origin: "https://jarthurlabs.github.io" },
+      signal: AbortSignal.timeout(20_000),
     });
-    await persist();
+    if (!response.ok) throw new Error(`negotiate failed with HTTP ${response.status}`);
+    const grant = await response.json();
     if (
-      payload.tick === 11 &&
-      payload.controllerState === "RESOLVED" &&
-      payload.operatorDecision === "APPROVED"
+      grant.accessMode !== "read-only-ui" ||
+      !Array.isArray(grant.roles) ||
+      grant.roles.length !== 0 ||
+      typeof grant.url !== "string" ||
+      !grant.url.startsWith("wss://")
     ) {
-      completed = true;
-      clearTimeout(timeout);
-      socket.close(1000, "final ARES-7 state captured");
+      throw new Error("negotiate response did not provide the no-role read-only viewer contract");
     }
-  });
-});
+    const current = new WebSocket(grant.url, "json.webpubsub.azure.v1");
+    socket = current;
+    current.addEventListener("message", (event) => {
+      processing = processing.then(async () => {
+        let envelope;
+        try {
+          envelope = JSON.parse(String(event.data));
+        } catch {
+          return;
+        }
+        if (envelope?.type === "system" && envelope?.event === "connected") {
+          await writeFile(readyPath, `${new Date().toISOString()}\n`);
+          return;
+        }
+        if (envelope?.type !== "message" || envelope?.from !== "server") return;
+        let payload = envelope.data;
+        if (envelope.dataType !== "json") {
+          try {
+            payload = JSON.parse(String(envelope.data));
+          } catch {
+            return;
+          }
+        }
+        if (
+          payload?.source !== "azure-live" ||
+          payload?.scenarioRunId !== runId ||
+          !Number.isInteger(payload?.tick) ||
+          typeof payload?.snapshotVersion !== "string" ||
+          typeof payload?.controllerState !== "string"
+        ) {
+          return;
+        }
+        messages.push({
+          source: "azure-live",
+          actionId: payload.actionId,
+          scenarioRunId: payload.scenarioRunId,
+          tick: payload.tick,
+          snapshotVersion: payload.snapshotVersion,
+          controllerState: payload.controllerState,
+          operatorDecision: payload.operatorDecision,
+          action: payload.action,
+          receivedAtUtc: new Date().toISOString(),
+          transport: "Azure Web PubSub with no group publish or join roles",
+        });
+        await persist();
+        if (
+          payload.tick === 11 &&
+          payload.controllerState === "RESOLVED" &&
+          payload.operatorDecision === "APPROVED"
+        ) {
+          completed = true;
+          clearTimeout(timeout);
+          clearTimeout(reconnectTimer);
+          current.close(1000, "final ARES-7 state captured");
+        }
+      });
+    });
+    current.addEventListener("error", () => {
+      try {
+        current.close(1011, "viewer reconnect");
+      } catch {
+        scheduleReconnect();
+      }
+    });
+    current.addEventListener("close", () => {
+      if (current === socket) scheduleReconnect();
+    });
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : String(error));
+    scheduleReconnect();
+  }
+}
 
-socket.addEventListener("error", () => {
-  process.exitCode = 3;
-});
-
-socket.addEventListener("close", () => {
-  clearTimeout(timeout);
-  if (!completed && !process.exitCode) process.exitCode = 4;
-});
+await connect();
 NODE
 
 node "$run_root/live-viewer-listener.mjs" \
@@ -725,7 +930,7 @@ node "$run_root/live-viewer-listener.mjs" \
 viewer_pid=$!
 
 viewer_ready="false"
-for _attempt in $(seq 1 60); do
+for _attempt in $(seq 1 240); do
   if [[ -s "$run_root/live-viewer-ready.txt" ]]; then
     viewer_ready="true"
     break
@@ -734,32 +939,43 @@ for _attempt in $(seq 1 60); do
   sleep 0.5
 done
 [[ "$viewer_ready" == "true" ]] || \
-  die "The receive-only Web PubSub viewer could not connect before telemetry started."
+  die "The no-role read-only Web PubSub viewer could not connect before telemetry started."
 
 capture_control_twins() {
   local evidence_prefix="$1"
+  local capture_attempt
   local twin_id
   local capture_pid
   local failed="false"
   local -a capture_pids=()
-  for twin_id in \
-    ares7-module-lab \
-    ares7-module-greenhouse \
-    ares7-airlock-main \
-    ares7-battery-alpha \
-    ares7-life-support; do
-    az dt twin show \
-      --dt-name "$digital_twins_name" \
-      --twin-id "$twin_id" \
-      --subscription "$subscription_id" \
-      --output json \
-      --only-show-errors > "$evidence_dir/${evidence_prefix}-${twin_id}.json" &
-    capture_pids+=("$!")
+  for capture_attempt in 1 2 3; do
+    failed="false"
+    capture_pids=()
+    for twin_id in \
+      ares7-module-lab \
+      ares7-module-greenhouse \
+      ares7-airlock-main \
+      ares7-battery-alpha \
+      ares7-life-support; do
+      az dt twin show \
+        --dt-name "$digital_twins_name" \
+        --twin-id "$twin_id" \
+        --subscription "$subscription_id" \
+        --output json \
+        --only-show-errors > "$evidence_dir/${evidence_prefix}-${twin_id}.json" &
+      capture_pids+=("$!")
+    done
+    for capture_pid in "${capture_pids[@]}"; do
+      if ! wait "$capture_pid"; then
+        failed="true"
+      fi
+    done
+    if [[ "$failed" == "false" ]]; then
+      return 0
+    fi
+    sleep 1
   done
-  for capture_pid in "${capture_pids[@]}"; do
-    wait "$capture_pid" || failed="true"
-  done
-  [[ "$failed" == "false" ]]
+  return 1
 }
 
 echo "Running twelve telemetry frames plus one exact duplicate."
@@ -771,12 +987,16 @@ export ARES7_CONFIRM_APPROVAL="approve-containment"
 approval_requested="false"
 pending_tick=""
 for _attempt in $(seq 1 240); do
-  az dt twin show \
+  if ! az dt twin show \
     --dt-name "$digital_twins_name" \
     --twin-id ares7-habitat \
     --subscription "$subscription_id" \
     --output json \
-    --only-show-errors > "$run_root/habitat-poll.json"
+    --only-show-errors > "$run_root/habitat-poll.json"; then
+    kill -0 "$scenario_pid" 2>/dev/null || break
+    sleep 1
+    continue
+  fi
   IFS=$'\t' read -r pending_state pending_decision pending_run pending_tick_candidate < <(
     python3 - "$run_root/habitat-poll.json" <<'PY'
 import json
@@ -826,13 +1046,16 @@ done
   die "The scenario did not reach the exact tick-4 LIFE_SUPPORT_RISK/PENDING human gate."
 
 same_tick_approval="false"
-for _attempt in $(seq 1 20); do
-  az dt twin show \
+for _attempt in $(seq 1 100); do
+  if ! az dt twin show \
     --dt-name "$digital_twins_name" \
     --twin-id ares7-habitat \
     --subscription "$subscription_id" \
     --output json \
-    --only-show-errors > "$run_root/approved-habitat-poll.json"
+    --only-show-errors > "$run_root/approved-habitat-poll.json"; then
+    sleep 0.5
+    continue
+  fi
   IFS=$'\t' read -r approved_state approved_decision approved_tick action_source decision_id last_decision_id < <(
     python3 - "$run_root/approved-habitat-poll.json" <<'PY'
 import json
@@ -894,6 +1117,72 @@ viewer_pid=""
 wait "$browser_pid"
 browser_pid=""
 unset ARES7_LIVE_NEGOTIATE_URL ARES7_BROWSER_EVIDENCE_DIR
+
+python3 - "$evidence_dir/browser" <<'PY' || \
+  die "The browser screenshots or video failed binary integrity and dimension checks."
+import json
+import pathlib
+import struct
+import sys
+
+root = pathlib.Path(sys.argv[1])
+
+def png_info(name):
+    path = root / name
+    data = path.read_bytes()
+    if len(data) < 24 or data[:8] != b"\x89PNG\r\n\x1a\n" or data[12:16] != b"IHDR":
+        raise SystemExit(1)
+    width, height = struct.unpack(">II", data[16:24])
+    if width != 1600 or height < 900 or len(data) < 10_000:
+        raise SystemExit(1)
+    return {"path": name, "bytes": len(data), "width": width, "height": height}
+
+video = root / "azure-live-browser-session.webm"
+video_bytes = video.read_bytes()
+if len(video_bytes) < 100_000 or video_bytes[:4] != b"\x1a\x45\xdf\xa3":
+    raise SystemExit(1)
+
+result = {
+    "status": "validated",
+    "firstUpdateScreenshot": png_info("azure-live-first-update.png"),
+    "finalResolvedScreenshot": png_info("azure-live-final-resolved.png"),
+    "video": {
+        "path": video.name,
+        "bytes": len(video_bytes),
+        "containerSignature": "webm-ebml",
+    },
+}
+(root / "browser-media-validation.json").write_text(json.dumps(result, indent=2) + "\n")
+PY
+
+if command -v ffprobe >/dev/null 2>&1; then
+  ffprobe \
+    -v error \
+    -select_streams v:0 \
+    -show_entries format=duration:stream=codec_name,width,height \
+    -of json \
+    "$evidence_dir/browser/azure-live-browser-session.webm" \
+    > "$evidence_dir/browser/browser-video-ffprobe.json"
+  python3 - "$evidence_dir/browser/browser-video-ffprobe.json" <<'PY' || \
+    die "The browser video failed duration, resolution, or codec validation."
+import json
+import sys
+data = json.load(open(sys.argv[1]))
+streams = data.get("streams") or []
+duration = float((data.get("format") or {}).get("duration") or 0)
+ok = (
+    len(streams) == 1
+    and streams[0].get("width") == 1600
+    and streams[0].get("height") == 900
+    and streams[0].get("codec_name") in {"vp8", "vp9"}
+    and 120 <= duration <= 420
+)
+raise SystemExit(0 if ok else 1)
+PY
+else
+  printf '%s\n' '{"status":"ffprobe unavailable; WebM EBML signature and nontrivial size validated"}' \
+    > "$evidence_dir/browser/browser-video-ffprobe.json"
+fi
 
 echo "Running strict, convergent post-run cloud verification."
 ARES7_VERIFY_STAGE="post-run" npm run azure:verify:live \
@@ -960,12 +1249,10 @@ az iot hub device-identity list \
   --output json \
   --only-show-errors > "$evidence_dir/device-identities.json"
 
-readonly iot_system_topic_resource_id="/subscriptions/${subscription_id}/resourceGroups/${resource_group}/providers/Microsoft.EventGrid/systemTopics/${iot_system_topic_name}"
-readonly controller_topic_resource_id="/subscriptions/${subscription_id}/resourceGroups/${resource_group}/providers/Microsoft.EventGrid/topics/${controller_topic_name}"
-
-az eventgrid event-subscription show \
+az eventgrid system-topic event-subscription show \
   --name ares7-device-telemetry-to-ingest \
-  --source-resource-id "$iot_system_topic_resource_id" \
+  --resource-group "$resource_group" \
+  --system-topic-name "$iot_system_topic_name" \
   --include-full-endpoint-url false \
   --include-attrib-secret false \
   --subscription "$subscription_id" \
@@ -973,9 +1260,10 @@ az eventgrid event-subscription show \
   --output json \
   --only-show-errors > "$evidence_dir/event-subscription-iot.json"
 
-az eventgrid event-subscription show \
+az eventgrid topic event-subscription show \
   --name ares7-twin-updates-to-controller \
-  --source-resource-id "$controller_topic_resource_id" \
+  --resource-group "$resource_group" \
+  --topic-name "$controller_topic_name" \
   --include-full-endpoint-url false \
   --include-attrib-secret false \
   --subscription "$subscription_id" \
@@ -1218,6 +1506,7 @@ habitat = load("habitat.json")
 viewer = load("live-viewer-messages.json")
 viewer_endpoints = load("live-viewer-endpoints.json")
 browser_state = load("browser/browser-state.json")
+browser_media = load("browser/browser-media-validation.json")
 snapshots = load("snapshots.json")
 models = load("digital-twin-models.json")
 devices = load("device-identities.json")
@@ -1341,12 +1630,15 @@ checks = {
         isinstance(habitat.get("lastActionId"), str)
         and habitat.get("lastActionId") == habitat.get("lastBroadcastActionId")
     ),
-    "receiveOnlyViewerCapturedFinalState": (
-        viewer.get("permissions") == "receive-only"
+    "readOnlyViewerCapturedFinalState": (
+        viewer.get("accessMode") == "read-only-ui"
+        and viewer.get("roles") == []
+        and viewer.get("upstreamInterfaceExposed") is False
         and isinstance(messages, list)
         and len(messages) > 0
         and last_viewer.get("scenarioRunId") == run_id
         and last_viewer.get("tick") == 11
+        and last_viewer.get("snapshotVersion") == f"v2:{run_id}:tick:11"
         and last_viewer.get("controllerState") == "RESOLVED"
         and last_viewer.get("operatorDecision") == "APPROVED"
     ),
@@ -1354,7 +1646,14 @@ checks = {
         browser_state.get("dataSource") == "AZURE LIVE · READ ONLY"
         and browser_state.get("scenarioRunId") == run_id
         and browser_state.get("tick") == "11"
+        and browser_state.get("snapshotVersion") == f"v2:{run_id}:tick:11"
         and browser_state.get("controllerState") == "RESOLVED"
+        and browser_state.get("accessMode") == "read-only-ui"
+        and browser_state.get("captureMode")
+            == "local-pinned-dist-under-intercepted-pages-origin"
+        and viewer_endpoints.get("captureMode")
+            == "local-pinned-dist-under-intercepted-pages-origin"
+        and browser_media.get("status") == "validated"
         and (root / "browser/azure-live-first-update.png").is_file()
         and (root / "browser/azure-live-final-resolved.png").is_file()
         and bool(browser_video_relative)
@@ -1423,7 +1722,10 @@ summary = {
     "clock": clock,
     "habitat": habitat,
     "viewer": {
-        "permissions": viewer.get("permissions"),
+        "accessMode": viewer.get("accessMode"),
+        "roles": viewer.get("roles"),
+        "upstreamInterfaceExposed": viewer.get("upstreamInterfaceExposed"),
+        "connectionAttempts": viewer.get("connectionAttempts"),
         "messageCount": viewer.get("messageCount"),
         "finalMessage": last_viewer,
     },
@@ -1431,7 +1733,11 @@ summary = {
         "functionAppName": viewer_endpoints.get("functionAppName"),
         "negotiateEndpoint": viewer_endpoints.get("negotiateEndpoint"),
         "publicViewerUrl": viewer_endpoints.get("publicViewerUrl"),
+        "accessMode": viewer_endpoints.get("accessMode"),
+        "roles": viewer_endpoints.get("roles"),
+        "captureMode": viewer_endpoints.get("captureMode"),
         "state": browser_state,
+        "mediaValidation": browser_media,
         "firstUpdateScreenshot": "browser/azure-live-first-update.png",
         "finalResolvedScreenshot": "browser/azure-live-final-resolved.png",
         "video": browser_video_relative,
