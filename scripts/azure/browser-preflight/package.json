@@ -1,0 +1,11 @@
+{
+  "name": "ares7-browser-preflight",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@sparticuz/chromium": "149.0.0",
+    "playwright-core-ares7": "npm:playwright-core@1.61.1",
+    "tar-fs": "3.1.3"
+  }
+}

@@ -1,7 +1,10 @@
 import { mkdir, readFile, realpath, rename, writeFile } from "node:fs/promises";
 import { extname, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { chromium } from "@playwright/test";
+import {
+  launchEvidenceBrowser,
+  validateEvidenceWebm,
+} from "./azure/evidence-browser-runtime.mjs";
 
 const repositoryRoot = fileURLToPath(new URL("../", import.meta.url));
 const distRoot = resolve(repositoryRoot, "dist");
@@ -55,47 +58,54 @@ function contentType(pathname) {
   ]).get(extname(pathname).toLowerCase()) ?? "application/octet-stream";
 }
 
-const browser = await chromium.launch({ headless: true });
-const context = await browser.newContext({
-  viewport: { width: 1600, height: 900 },
-  colorScheme: "dark",
-  reducedMotion: "reduce",
-  recordVideo: { dir: evidenceRoot, size: { width: 1600, height: 900 } },
-});
-const page = await context.newPage();
+const { browser, metadata: browserRuntime } = await launchEvidenceBrowser();
+let context;
+let page;
+let video;
 const browserMessages = [];
-page.on("console", (message) => browserMessages.push(`${message.type()}: ${message.text()}`));
-page.on("pageerror", (error) => browserMessages.push(`pageerror: ${error.message}`));
-
-await page.route(`${pagesOrigin}${pagesPath}**`, async (route) => {
-  const requestUrl = new URL(route.request().url());
-  let requestedPath = decodeURIComponent(requestUrl.pathname.slice(pagesPath.length));
-  if (!requestedPath || requestedPath.endsWith("/")) requestedPath += "index.html";
-  const filePath = resolve(verifiedDistRoot, requestedPath);
-  const relativePath = relative(verifiedDistRoot, filePath);
-  if (relativePath.startsWith("..") || relativePath === "") {
-    await route.fulfill({ status: 404, body: "Not found" });
-    return;
-  }
-  try {
-    const body = await readFile(filePath);
-    await route.fulfill({ status: 200, body, contentType: contentType(filePath) });
-  } catch (error) {
-    if (error?.code === "ENOENT") {
-      await route.fulfill({ status: 404, body: "Not found" });
-      return;
-    }
-    throw error;
-  }
-});
-
 const liveUrl = new URL(pagesUrl);
 liveUrl.searchParams.set("source", "azure");
 liveUrl.searchParams.set("negotiate", parsedNegotiateUrl.toString());
-const video = page.video();
 const expectedFinalSnapshotVersion = `v2:${scenarioRunId}:tick:11`;
 
 try {
+  await writeFile(
+    resolve(evidenceRoot, "browser-runtime.json"),
+    `${JSON.stringify(browserRuntime, null, 2)}\n`,
+  );
+  context = await browser.newContext({
+    viewport: { width: 1600, height: 900 },
+    colorScheme: "dark",
+    reducedMotion: "reduce",
+    recordVideo: { dir: evidenceRoot, size: { width: 1600, height: 900 } },
+  });
+  page = await context.newPage();
+  video = page.video();
+  page.on("console", (message) => browserMessages.push(`${message.type()}: ${message.text()}`));
+  page.on("pageerror", (error) => browserMessages.push(`pageerror: ${error.message}`));
+
+  await page.route(`${pagesOrigin}${pagesPath}**`, async (route) => {
+    const requestUrl = new URL(route.request().url());
+    let requestedPath = decodeURIComponent(requestUrl.pathname.slice(pagesPath.length));
+    if (!requestedPath || requestedPath.endsWith("/")) requestedPath += "index.html";
+    const filePath = resolve(verifiedDistRoot, requestedPath);
+    const relativePath = relative(verifiedDistRoot, filePath);
+    if (relativePath.startsWith("..") || relativePath === "") {
+      await route.fulfill({ status: 404, body: "Not found" });
+      return;
+    }
+    try {
+      const body = await readFile(filePath);
+      await route.fulfill({ status: 200, body, contentType: contentType(filePath) });
+    } catch (error) {
+      if (error?.code === "ENOENT") {
+        await route.fulfill({ status: 404, body: "Not found" });
+        return;
+      }
+      throw error;
+    }
+  });
+
   await page.goto(liveUrl.toString(), { waitUntil: "domcontentloaded" });
   await page.locator("#data-source-label").filter({ hasText: "AZURE LIVE · READ ONLY" }).waitFor({
     state: "visible",
@@ -103,7 +113,7 @@ try {
   });
   await writeFile(
     resolve(evidenceRoot, "browser-ready.json"),
-    `${JSON.stringify({ status: "connected-read-only", accessMode: "read-only-ui", captureMode, origin: pagesOrigin, capturedAtUtc: new Date().toISOString() }, null, 2)}\n`,
+    `${JSON.stringify({ status: "connected-read-only", accessMode: "read-only-ui", captureMode, browserProfile: browserRuntime.profile, browserVersion: browserRuntime.browserVersion, origin: pagesOrigin, capturedAtUtc: new Date().toISOString() }, null, 2)}\n`,
   );
 
   await page.waitForFunction(
@@ -144,20 +154,34 @@ try {
   }
   await writeFile(
     resolve(evidenceRoot, "browser-state.json"),
-    `${JSON.stringify({ ...browserState, accessMode: "read-only-ui", captureMode, origin: pagesOrigin, capturedAtUtc: new Date().toISOString() }, null, 2)}\n`,
+    `${JSON.stringify({ ...browserState, accessMode: "read-only-ui", captureMode, browserProfile: browserRuntime.profile, browserVersion: browserRuntime.browserVersion, origin: pagesOrigin, capturedAtUtc: new Date().toISOString() }, null, 2)}\n`,
   );
 } finally {
-  await writeFile(resolve(evidenceRoot, "browser-console.log"), `${browserMessages.join("\n")}\n`);
-  await page.close();
-  await context.close();
-  if (video) {
-    const videoPath = await video.path();
-    const finalVideoPath = resolve(evidenceRoot, "azure-live-browser-session.webm");
-    await rename(videoPath, finalVideoPath);
+  try {
     await writeFile(
-      resolve(evidenceRoot, "browser-video-path.txt"),
-      `${finalVideoPath}\n`,
+      resolve(evidenceRoot, "browser-console.log"),
+      `${browserMessages.join("\n")}\n`,
     );
+    await page?.close();
+    await context?.close();
+    if (video) {
+      const videoPath = await video.path();
+      const finalVideoPath = resolve(evidenceRoot, "azure-live-browser-session.webm");
+      await rename(videoPath, finalVideoPath);
+      await writeFile(
+        resolve(evidenceRoot, "browser-video-path.txt"),
+        `${finalVideoPath}\n`,
+      );
+      const videoDecode = await validateEvidenceWebm(finalVideoPath, {
+        minimumBytes: 100_000,
+        timeout: 240_000,
+      });
+      await writeFile(
+        resolve(evidenceRoot, "browser-video-decode.json"),
+        `${JSON.stringify(videoDecode, null, 2)}\n`,
+      );
+    }
+  } finally {
+    await browser.close();
   }
-  await browser.close();
 }
