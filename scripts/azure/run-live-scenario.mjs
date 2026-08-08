@@ -11,6 +11,8 @@ import {
   validateScope,
 } from "./common.mjs";
 
+const runIdPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
 try {
   const scope = validateScope(process.env, "write");
   requireExactConfirmation(
@@ -112,6 +114,9 @@ try {
     throw new Error("Azure CLI did not return the expected device-scoped credential");
   }
   const scenarioRunId = process.env.ARES7_SCENARIO_RUN_ID?.trim() || randomUUID();
+  if (!runIdPattern.test(scenarioRunId)) {
+    throw new Error("ARES7_SCENARIO_RUN_ID must be a UUID accepted by the live telemetry contract");
+  }
   console.log(`starting ARES-7 scenario run ${scenarioRunId}`);
   console.log("Use the guarded approval command in a second Cloud Shell after the habitat reaches LIFE_SUPPORT_RISK/PENDING.");
   run("npm", ["--prefix", "simulator", "start"], {

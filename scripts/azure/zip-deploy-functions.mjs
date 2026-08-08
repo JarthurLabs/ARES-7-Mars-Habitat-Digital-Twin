@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { relative, resolve } from "node:path";
 import {
   assertAzureAccount,
   expectedResourceGroup,
@@ -26,7 +26,8 @@ try {
     repositoryRoot,
     process.env.ARES7_FUNCTION_ARTIFACT ?? "artifacts/released-package.zip",
   );
-  if (!artifact.startsWith(repositoryRoot) || !existsSync(artifact)) {
+  const relativeArtifact = relative(repositoryRoot, artifact);
+  if (relativeArtifact.startsWith("..") || relativeArtifact === "" || !existsSync(artifact)) {
     throw new Error("the Function package must exist inside the repository");
   }
   const entries = run("unzip", ["-Z1", artifact], { capture: true })

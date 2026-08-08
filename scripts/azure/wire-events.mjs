@@ -13,6 +13,10 @@ import {
 const routeName = "ares7-controller-updates";
 const endpointName = "ares7-controller-topic";
 const routeFilter = "type = 'Microsoft.DigitalTwins.Twin.Update' AND (subject = 'ares7-clock' OR subject = 'ares7-habitat')";
+const endpointReadyAttempts = 18;
+const endpointReadyDelayMs = 10_000;
+
+const delay = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
 
 try {
   const scope = validateScope(process.env, "write");
@@ -87,6 +91,31 @@ try {
     "Microsoft.DigitalTwins/digitalTwinsInstances",
     "adt-ares7-",
   );
+  for (let attempt = 1; attempt <= endpointReadyAttempts; attempt += 1) {
+    const endpoint = runAzureJson(scope, [
+      "dt",
+      "endpoint",
+      "show",
+      "--dt-name",
+      digitalTwinsName,
+      "--resource-group",
+      scope.resourceGroup,
+      "--endpoint-name",
+      endpointName,
+    ]);
+    const state = String(endpoint.provisioningState ?? "");
+    if (state === "Succeeded") break;
+    if (["Failed", "Canceled", "Deleted"].includes(state)) {
+      throw new Error(`Azure Digital Twins endpoint ${endpointName} entered ${state}`);
+    }
+    if (attempt === endpointReadyAttempts) {
+      throw new Error(`Azure Digital Twins endpoint ${endpointName} did not become ready`);
+    }
+    console.log(
+      `waiting for Azure Digital Twins endpoint ${endpointName} (${state || "unknown"}, attempt ${attempt}/${endpointReadyAttempts})`,
+    );
+    await delay(endpointReadyDelayMs);
+  }
   const routes = runAzureJson(scope, [
     "dt",
     "route",

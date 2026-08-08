@@ -6,6 +6,7 @@ coverage/
 **/coverage/
 playwright-report/
 test-results/
+artifacts/
 
 .env
 .env.*

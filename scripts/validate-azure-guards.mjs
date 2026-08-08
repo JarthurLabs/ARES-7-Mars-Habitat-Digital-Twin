@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import {
   expectedResourceGroup,
   requireExactConfirmation,
@@ -77,6 +78,10 @@ assert.deepEqual(
   ),
   { resourceGroup: expectedResourceGroup, subscriptionId },
 );
+
+const cleanupSource = readFileSync("scripts/azure/cleanup.mjs", "utf8");
+assert.match(cleanupSource, /runAzure\(scope, \["group", "delete"/);
+assert.doesNotMatch(cleanupSource, /run\("az", \["group", "delete"/);
 
 console.log(
   "validated exact resource-group, subscription, live-write, and cleanup guards",

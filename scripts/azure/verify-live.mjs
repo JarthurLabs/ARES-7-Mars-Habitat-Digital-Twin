@@ -8,6 +8,14 @@ import {
   validateScope,
 } from "./common.mjs";
 
+const verificationStage = process.env.ARES7_VERIFY_STAGE?.trim() || "post-run";
+if (!new Set(["pre-run", "post-run"]).has(verificationStage)) {
+  throw new Error("ARES7_VERIFY_STAGE must be pre-run or post-run");
+}
+const verificationAttempts = verificationStage === "post-run" ? 12 : 1;
+const verificationDelayMs = 10_000;
+const delay = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
+
 try {
   const scope = validateScope(process.env, "read");
   assertAzureAccount(scope);
@@ -92,9 +100,24 @@ try {
   ) {
     throw new Error("Azure Digital Twins route target or filter has drift");
   }
-  run("npm", ["--prefix", "functions", "run", "verify:graph"], {
-    env: { AZURE_DIGITAL_TWINS_ENDPOINT: `https://${hostName}` },
-  });
+  for (let attempt = 1; attempt <= verificationAttempts; attempt += 1) {
+    try {
+      run("npm", ["--prefix", "functions", "run", "verify:graph"], {
+        env: {
+          AZURE_DIGITAL_TWINS_ENDPOINT: `https://${hostName}`,
+          ARES7_REQUIRE_LIVE_COMPLETE:
+            verificationStage === "post-run" ? "true" : "false",
+        },
+      });
+      break;
+    } catch (error) {
+      if (attempt === verificationAttempts) throw error;
+      console.log(
+        `live state is still converging; retrying verification (${attempt}/${verificationAttempts})`,
+      );
+      await delay(verificationDelayMs);
+    }
+  }
 } catch (error) {
   handleFailure(error);
 }

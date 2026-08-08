@@ -176,7 +176,7 @@ resource controllerSubscription 'Microsoft.EventGrid/topics/eventSubscriptions@2
       isSubjectCaseSensitive: true
       advancedFilters: [
         {
-          key: 'subject'
+          key: 'Subject'
           operatorType: 'StringIn'
           values: [
             'ares7-clock'
