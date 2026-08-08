@@ -4,7 +4,7 @@ set -euo pipefail
 readonly resource_group="rg-ares7-lab-eus2"
 readonly repository_url="https://github.com/JarthurLabs/ARES-7-Mars-Habitat-Digital-Twin.git"
 readonly repository_branch="agent/complete-ares-live-20260808"
-readonly fixed_live_commit="a9550ebc08b848b65c1515f870249acf54bd793f"
+readonly fixed_live_commit="42d3762cd9f1b428e26fef47237c937fffe9819d"
 readonly repository_commit="${ARES7_REPOSITORY_COMMIT:-$fixed_live_commit}"
 readonly evidence_browser_chromium_version="149.0.0"
 readonly evidence_browser_playwright_core_version="1.61.1"
@@ -910,7 +910,6 @@ az storage container show \
   --account-name "$storage_account_name" \
   --auth-mode login \
   --subscription "$subscription_id" \
-  --query '{name:name,publicAccess:publicAccess,metadata:metadata}' \
   --output json \
   --only-show-errors > "$evidence_dir/scene-container.json"
 
@@ -919,47 +918,72 @@ az storage blob list \
   --account-name "$storage_account_name" \
   --auth-mode login \
   --subscription "$subscription_id" \
-  --query "[?name == 'ares7-habitat-segmented.glb' || name == '3DScenesConfiguration.json'].{name:name,contentType:properties.contentSettings.contentType,metadata:metadata}" \
+  --query '[].name' \
   --output json \
-  --only-show-errors > "$evidence_dir/scene-blobs.json"
+  --only-show-errors > "$evidence_dir/scene-blob-names.json"
 
-python3 - \
+az storage blob show \
+  --container-name ares7-3d-scenes \
+  --account-name "$storage_account_name" \
+  --name ares7-habitat-segmented.glb \
+  --auth-mode login \
+  --subscription "$subscription_id" \
+  --query '{name:name,contentType:properties.contentSettings.contentType,contentLength:properties.contentLength,metadata:metadata}' \
+  --output json \
+  --only-show-errors > "$evidence_dir/scene-asset-blob.json"
+
+az storage blob show \
+  --container-name ares7-3d-scenes \
+  --account-name "$storage_account_name" \
+  --name 3DScenesConfiguration.json \
+  --auth-mode login \
+  --subscription "$subscription_id" \
+  --query '{name:name,contentType:properties.contentSettings.contentType,contentLength:properties.contentLength,metadata:metadata}' \
+  --output json \
+  --only-show-errors > "$evidence_dir/scene-configuration-blob.json"
+
+az storage blob download \
+  --container-name ares7-3d-scenes \
+  --account-name "$storage_account_name" \
+  --name ares7-habitat-segmented.glb \
+  --file "$run_root/downloaded-ares7-habitat-segmented.glb" \
+  --auth-mode login \
+  --subscription "$subscription_id" \
+  --output none \
+  --only-show-errors
+
+az storage blob download \
+  --container-name ares7-3d-scenes \
+  --account-name "$storage_account_name" \
+  --name 3DScenesConfiguration.json \
+  --file "$run_root/downloaded-3DScenesConfiguration.json" \
+  --auth-mode login \
+  --subscription "$subscription_id" \
+  --output none \
+  --only-show-errors
+
+node scripts/azure/validate-scene-bundle-evidence.mjs \
   "$evidence_dir/scene-storage-account.json" \
   "$evidence_dir/scene-container.json" \
-  "$evidence_dir/scene-blobs.json" <<'PY' || \
-  die "The uploaded 3D Scenes bundle failed private-storage or digest verification."
+  "$evidence_dir/scene-blob-names.json" \
+  "$evidence_dir/scene-asset-blob.json" \
+  "$evidence_dir/scene-configuration-blob.json" \
+  models/3d/ares7-habitat-segmented.glb \
+  models/3d/3DScenesConfiguration.json \
+  "$run_root/downloaded-ares7-habitat-segmented.glb" \
+  "$run_root/downloaded-3DScenesConfiguration.json" \
+  > "$evidence_dir/scene-bundle-verification.json" \
+  2> "$evidence_dir/scene-bundle-verification.error.log" || \
+  die "The uploaded 3D Scenes bundle failed exact private-storage, metadata, or downloaded-byte verification."
+
+python3 - \
+  "$evidence_dir/scene-bundle-verification.json" \
+  "$evidence_dir/scene-blobs.json" <<'PY'
 import json
-import re
+import pathlib
 import sys
-account = json.load(open(sys.argv[1]))
-container = json.load(open(sys.argv[2]))
-blobs = json.load(open(sys.argv[3]))
-if account.get("allowBlobPublicAccess") is not False:
-    raise SystemExit(1)
-if account.get("allowSharedKeyAccess") is not False:
-    raise SystemExit(1)
-if account.get("defaultToOAuthAuthentication") is not True:
-    raise SystemExit(1)
-if account.get("minimumTlsVersion") != "TLS1_2":
-    raise SystemExit(1)
-if container.get("name") != "ares7-3d-scenes" or container.get("publicAccess") not in (None, ""):
-    raise SystemExit(1)
-by_name = {item.get("name"): item for item in blobs}
-expected_types = {
-    "ares7-habitat-segmented.glb": "model/gltf-binary",
-    "3DScenesConfiguration.json": "application/json",
-}
-if set(by_name) != set(expected_types):
-    raise SystemExit(1)
-for name, content_type in expected_types.items():
-    item = by_name[name]
-    if item.get("contentType") != content_type:
-        raise SystemExit(1)
-    if not re.fullmatch(r"[0-9a-f]{64}", str((item.get("metadata") or {}).get("sha256", ""))):
-        raise SystemExit(1)
-configuration_metadata = by_name["3DScenesConfiguration.json"].get("metadata") or {}
-if (configuration_metadata.get("schemaVersion") or configuration_metadata.get("schemaversion")) != "v1.0.0":
-    raise SystemExit(1)
+verification = json.load(open(sys.argv[1]))
+pathlib.Path(sys.argv[2]).write_text(json.dumps(verification["blobs"], indent=2) + "\n")
 PY
 
 live_negotiate_url="https://${function_app_name}.azurewebsites.net/api/viewer/negotiate"
@@ -1755,6 +1779,7 @@ tagged_resources = load("ares-tagged-resources-after.json")
 scene_validation = load("scene-configuration-validation.json")
 scene_storage = load("scene-storage-account.json")
 scene_container = load("scene-container.json")
+scene_bundle = load("scene-bundle-verification.json")
 scene_blobs = load("scene-blobs.json")
 pending_habitat = load("pending-habitat.json")
 approved_habitat = load("approved-habitat.json")
@@ -1918,8 +1943,22 @@ checks = {
         and scene_storage.get("defaultToOAuthAuthentication") is True
         and scene_storage.get("minimumTlsVersion") == "TLS1_2"
         and scene_container.get("publicAccess") in (None, "")
+        and scene_bundle.get("status") == "ARES7_PRIVATE_SCENE_BUNDLE_VERIFIED"
+        and scene_bundle.get("container") == "ares7-3d-scenes"
+        and scene_bundle.get("blobs") == scene_blobs
+        and len(scene_blobs) == 2
         and {item.get("name") for item in scene_blobs}
             == {"ares7-habitat-segmented.glb", "3DScenesConfiguration.json"}
+        and all(
+            isinstance(item.get("contentLength"), int)
+            and item.get("contentLength") > 0
+            and bool(re.fullmatch(r"[0-9a-f]{64}", str(item.get("sha256", ""))))
+            for item in scene_blobs
+        )
+        and next(
+            item for item in scene_blobs
+            if item.get("name") == "3DScenesConfiguration.json"
+        ).get("schemaVersion") == "v1.0.0"
     ),
     "cleanupExcluded": True,
 }
@@ -1995,7 +2034,8 @@ summary = {
         "grantOrWebSocketUrlIncluded": False,
     },
     "sceneBundle": {
-        "status": "validated private bundle uploaded; Studio UI rendering remains provisional",
+        "status": scene_bundle.get("status"),
+        "scope": "validated private bundle uploaded; Studio UI rendering remains provisional",
         "schemaVersion": scene_validation.get("schemaVersion"),
         "schemaSha256": scene_validation.get("schemaSha256"),
         "sceneId": scene_validation.get("sceneId"),
