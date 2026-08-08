@@ -4,23 +4,57 @@ set -euo pipefail
 readonly resource_group="rg-ares7-lab-eus2"
 readonly repository_url="https://github.com/JarthurLabs/ARES-7-Mars-Habitat-Digital-Twin.git"
 readonly repository_branch="agent/complete-ares-live-20260808"
-readonly fixed_live_commit="b2557883a3acff0d099c5c4f0cf08a54aef0f580"
+readonly fixed_live_commit="a9550ebc08b848b65c1515f870249acf54bd793f"
 readonly repository_commit="${ARES7_REPOSITORY_COMMIT:-$fixed_live_commit}"
+readonly evidence_browser_chromium_version="149.0.0"
+readonly evidence_browser_playwright_core_version="1.61.1"
+readonly evidence_browser_helper_sha256="fa2440bb19174412f337d0c053f9e996dd89252c5e018f951dd4fda60060174d"
+readonly evidence_browser_preflight_package_sha256="d51de9d1e12251d1b0cecfd78c05dc5accd39600d48bb1ce997174bc0f281a0e"
+readonly evidence_browser_preflight_lock_sha256="0a670c6f2984a15f893d5f7e67bd27698c329f603f0a143b704d30cd15f249a2"
+runner_mode="${ARES7_MODE:-live}"
+case "$runner_mode" in
+  live|browser-preflight) ;;
+  *)
+    echo "ARES-7 guard stopped: ARES7_MODE must be either live or browser-preflight." >&2
+    exit 1
+    ;;
+esac
+readonly runner_mode
 readonly max_spend_usd="10"
 readonly run_started_utc="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 readonly run_id="$(python3 -c 'import uuid; print(uuid.uuid4())')"
 readonly launch_dir="$PWD"
-readonly run_root="$(mktemp -d /tmp/ares7-live-evidence.XXXXXX)"
+if [[ "$runner_mode" == "browser-preflight" ]]; then
+  readonly run_root="$(mktemp -d /tmp/ares7-browser-preflight.XXXXXX)"
+else
+  readonly run_root="$(mktemp -d /tmp/ares7-live-evidence.XXXXXX)"
+fi
 readonly evidence_dir="$run_root/evidence"
-readonly evidence_archive="$launch_dir/ARES7_Live_Evidence_${run_id}.zip"
+if [[ "$runner_mode" == "browser-preflight" ]]; then
+  readonly evidence_archive="$launch_dir/ARES7_Browser_Preflight_${run_id}.zip"
+else
+  readonly evidence_archive="$launch_dir/ARES7_Live_Evidence_${run_id}.zip"
+fi
 
 mkdir -p "$evidence_dir"
-printf '%s\n' \
-  '{' \
-  "  \"scenarioRunId\": \"$run_id\"," \
-  "  \"startedAtUtc\": \"$run_started_utc\"," \
-  '  "cleanupIncluded": false' \
-  '}' > "$evidence_dir/run-metadata.json"
+if [[ "$runner_mode" == "browser-preflight" ]]; then
+  printf '%s\n' \
+    '{' \
+    "  \"preflightRunId\": \"$run_id\"," \
+    "  \"startedAtUtc\": \"$run_started_utc\"," \
+    '  "runnerMode": "browser-preflight",' \
+    '  "azureAccessed": false,' \
+    '  "cleanupIncluded": false' \
+    '}' > "$evidence_dir/run-metadata.json"
+else
+  printf '%s\n' \
+    '{' \
+    "  \"scenarioRunId\": \"$run_id\"," \
+    "  \"startedAtUtc\": \"$run_started_utc\"," \
+    '  "runnerMode": "live",' \
+    '  "cleanupIncluded": false' \
+    '}' > "$evidence_dir/run-metadata.json"
+fi
 
 subscription_id=""
 tenant_id=""
@@ -33,6 +67,118 @@ browser_pid=""
 die() {
   echo "ARES-7 guard stopped: $*" >&2
   exit 1
+}
+
+die_with_log() {
+  local stage="$1"
+  local log_path="$2"
+  echo "ARES-7 $stage failed. Redacted diagnostic tail:" >&2
+  python3 - "$log_path" <<'PY' >&2
+import pathlib
+import re
+import sys
+
+path = pathlib.Path(sys.argv[1])
+if not path.is_file():
+    print("<diagnostic log was not created>")
+    raise SystemExit(0)
+try:
+    lines = path.read_text(errors="replace").splitlines()[-80:]
+except OSError as error:
+    print(f"<diagnostic log could not be read: {error.__class__.__name__}>")
+    raise SystemExit(0)
+text = "\n".join(lines)
+text = re.sub(r"(?i)(/home/)[^/\s]+", r"\1<redacted-user>", text)
+text = re.sub(r"(?i)[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}", "<redacted-email>", text)
+text = re.sub(
+    r"(?i)\b[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\b",
+    "<redacted-id>",
+    text,
+)
+print(text or "<diagnostic log was empty>")
+PY
+  die "$stage failed; inspect the redacted evidence archive for the complete diagnostic log."
+}
+
+run_evidence_browser_smoke() {
+  local helper_path="$1"
+  local runtime_path="$2"
+  local output_path="$3"
+  local log_path="$4"
+  if ! node --input-type=module - "$helper_path" "$runtime_path" "$output_path" \
+    > "$log_path" 2>&1 <<'NODE'
+import { mkdir, stat, writeFile } from "node:fs/promises";
+import { resolve } from "node:path";
+import { pathToFileURL } from "node:url";
+
+const [helperPath, runtimePath, outputPath] = process.argv.slice(2);
+await mkdir(runtimePath, { recursive: true, mode: 0o700 });
+await mkdir(outputPath, { recursive: true, mode: 0o700 });
+const { launchEvidenceBrowser, validateEvidenceWebm } = await import(
+  pathToFileURL(helperPath).href
+);
+const { browser, metadata } = await launchEvidenceBrowser({
+  runtimeDirectory: runtimePath,
+  timeout: 60_000,
+});
+
+try {
+  const context = await browser.newContext({
+    viewport: { width: 640, height: 360 },
+    recordVideo: { dir: outputPath, size: { width: 640, height: 360 } },
+  });
+  const page = await context.newPage();
+  const video = page.video();
+  await page.setContent('<canvas id="gl" width="640" height="360"></canvas>');
+  const webglAvailable = await page.evaluate(() => {
+    const canvas = document.querySelector("#gl");
+    return Boolean(canvas?.getContext("webgl2") || canvas?.getContext("webgl"));
+  });
+  if (!webglAvailable) throw new Error("rootless evidence Chromium did not provide WebGL");
+  const screenshotPath = resolve(outputPath, "smoke.png");
+  await page.screenshot({ path: screenshotPath });
+  await page.waitForTimeout(750);
+  await page.close();
+  await context.close();
+  if (!video) throw new Error("Playwright did not create a browser-preflight video");
+  const videoPath = await video.path();
+  const [screenshotStat, videoStat] = await Promise.all([
+    stat(screenshotPath),
+    stat(videoPath),
+  ]);
+  if (screenshotStat.size < 1_000 || videoStat.size < 1_000) {
+    throw new Error("Browser-preflight screenshot or video was unexpectedly empty");
+  }
+  const videoDecode = await validateEvidenceWebm(videoPath, {
+    minimumBytes: 1_000,
+    minimumDecodedFrameBytes: 1_000,
+    timeout: 30_000,
+  });
+  await writeFile(
+    resolve(outputPath, "browser-runtime-metadata.json"),
+    `${JSON.stringify(
+      {
+        status: "passed",
+        webglAvailable,
+        screenshotBytes: screenshotStat.size,
+        videoBytes: videoStat.size,
+        videoDecodedWithPinnedFfmpeg: true,
+        decodedFrameBytes: videoDecode.decodedFrameBytes,
+        videoDecode,
+        ...metadata,
+      },
+      null,
+      2,
+    )}\n`,
+  );
+  console.log("Rootless Chromium launch, ldd, WebGL, screenshot, and WebM video smoke passed");
+} finally {
+  await browser.close();
+}
+NODE
+  then
+    die_with_log "rootless Chromium compatibility smoke" "$log_path"
+  fi
 }
 
 terminate_process_tree() {
@@ -105,32 +251,131 @@ trap finish EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 
-echo "ARES-7 guarded live evidence run: $run_id"
+if [[ "$runner_mode" == "browser-preflight" ]]; then
+  echo "ARES-7 browser-only compatibility preflight: $run_id"
+  echo "This mode performs no Azure account lookup, resource read, deployment, role assignment, or deletion."
+else
+  echo "ARES-7 guarded live evidence run: $run_id"
+fi
 echo "Pinned repository commit: $repository_commit"
 echo "No resource deletion is included in this script."
 
 [[ "$repository_commit" =~ ^[0-9a-fA-F]{40}$ ]] || \
   die "ARES7_REPOSITORY_COMMIT must be one exact 40-character commit."
 
-for required_command in az git node npm python3 zip unzip ps; do
+required_commands=(curl ldd node npm python3 sha256sum uname zip unzip ps)
+if [[ "$runner_mode" == "live" ]]; then
+  required_commands+=(az git)
+fi
+for required_command in "${required_commands[@]}"; do
   command -v "$required_command" >/dev/null 2>&1 || \
     die "Required command is unavailable: $required_command"
 done
 
-node_major="$(node --version | sed -E 's/^v([0-9]+).*/\1/')"
-if [[ ! "$node_major" =~ ^[0-9]+$ ]] || [[ "$node_major" -lt 22 ]]; then
+node_runtime_supported() {
+  python3 - "$(node --version)" <<'PY'
+import re
+import sys
+match = re.fullmatch(r"v(\d+)\.(\d+)\.(\d+)", sys.argv[1])
+supported = bool(match) and (
+    int(match.group(1)) >= 24
+    or (int(match.group(1)) == 22 and int(match.group(2)) >= 17)
+)
+raise SystemExit(0 if supported else 1)
+PY
+}
+
+if ! node_runtime_supported; then
   if command -v nvm >/dev/null 2>&1; then
-    nvm install 22
-    nvm use 22
+    nvm install 24
+    nvm use 24
   elif [[ -n "${NVM_DIR:-}" && -s "${NVM_DIR}/nvm.sh" ]]; then
     # shellcheck source=/dev/null
     . "${NVM_DIR}/nvm.sh"
-    nvm install 22
-    nvm use 22
+    nvm install 24
+    nvm use 24
   else
-    die "Node.js 22 or newer is required; found $(node --version)."
+    die "Node.js 24 or Node.js 22.17 and newer is required; found $(node --version)."
   fi
 fi
+node_runtime_supported || \
+  die "Node.js 24 or Node.js 22.17 and newer is required; found $(node --version)."
+
+cloud_shell_os_id="$(. /etc/os-release && printf '%s' "${ID:-}")"
+cloud_shell_os_version="$(. /etc/os-release && printf '%s' "${VERSION_ID:-}")"
+cloud_shell_architecture="$(uname -m)"
+if [[ "$cloud_shell_os_id" != "azurelinux" ]] || \
+   [[ ! "$cloud_shell_os_version" =~ ^3([.]0)?$ ]] || \
+   [[ "$cloud_shell_architecture" != "x86_64" ]]; then
+  die "This guarded Cloud Shell runner requires Azure Linux 3 on x86_64; found ${cloud_shell_os_id:-unknown} ${cloud_shell_os_version:-unknown} ${cloud_shell_architecture:-unknown}."
+fi
+
+if [[ "$runner_mode" == "browser-preflight" ]]; then
+  readonly preflight_package_root="$run_root/browser-packages"
+  readonly preflight_runtime_root="$run_root/browser-runtime"
+  readonly preflight_output_root="$evidence_dir/browser-preflight"
+  readonly preflight_helper_path="$preflight_package_root/evidence-browser-runtime.mjs"
+  readonly preflight_helper_url="https://raw.githubusercontent.com/JarthurLabs/ARES-7-Mars-Habitat-Digital-Twin/${fixed_live_commit}/scripts/azure/evidence-browser-runtime.mjs"
+  readonly preflight_package_url="https://raw.githubusercontent.com/JarthurLabs/ARES-7-Mars-Habitat-Digital-Twin/${fixed_live_commit}/scripts/azure/browser-preflight/package.json"
+  readonly preflight_lock_url="https://raw.githubusercontent.com/JarthurLabs/ARES-7-Mars-Habitat-Digital-Twin/${fixed_live_commit}/scripts/azure/browser-preflight/package-lock.json"
+  readonly preflight_ffmpeg_root="$run_root/playwright-browsers"
+
+  mkdir -p "$preflight_package_root" "$preflight_runtime_root" "$preflight_output_root" "$preflight_ffmpeg_root"
+  chmod 700 "$preflight_package_root" "$preflight_runtime_root" "$preflight_output_root" "$preflight_ffmpeg_root"
+
+  echo "Downloading the reviewed minimal browser-preflight manifest, lockfile, and helper."
+  if ! curl -fL "$preflight_package_url" -o "$preflight_package_root/package.json" \
+    > "$evidence_dir/browser-preflight-manifest-download.log" 2>&1; then
+    die_with_log "browser-preflight manifest download" "$evidence_dir/browser-preflight-manifest-download.log"
+  fi
+  if ! curl -fL "$preflight_lock_url" -o "$preflight_package_root/package-lock.json" \
+    > "$evidence_dir/browser-preflight-lock-download.log" 2>&1; then
+    die_with_log "browser-preflight lockfile download" "$evidence_dir/browser-preflight-lock-download.log"
+  fi
+  if ! curl -fL "$preflight_helper_url" -o "$preflight_helper_path" \
+    > "$evidence_dir/browser-preflight-helper-download.log" 2>&1; then
+    die_with_log "browser-preflight helper download" "$evidence_dir/browser-preflight-helper-download.log"
+  fi
+  if ! printf '%s  %s\n%s  %s\n%s  %s\n' \
+    "$evidence_browser_preflight_package_sha256" "$preflight_package_root/package.json" \
+    "$evidence_browser_preflight_lock_sha256" "$preflight_package_root/package-lock.json" \
+    "$evidence_browser_helper_sha256" "$preflight_helper_path" \
+    | sha256sum --check \
+    > "$evidence_dir/browser-preflight-source-integrity.log" 2>&1; then
+    die_with_log "browser-preflight source integrity verification" "$evidence_dir/browser-preflight-source-integrity.log"
+  fi
+
+  echo "Installing the lock-bound rootless browser preflight packages without running package scripts."
+  if ! npm --prefix "$preflight_package_root" ci \
+    --ignore-scripts \
+    --no-audit \
+    --no-fund \
+    > "$evidence_dir/browser-preflight-package-install.log" 2>&1; then
+    die_with_log "browser-preflight package installation" "$evidence_dir/browser-preflight-package-install.log"
+  fi
+
+  if ! PLAYWRIGHT_BROWSERS_PATH="$preflight_ffmpeg_root" \
+    node "$preflight_package_root/node_modules/playwright-core-ares7/cli.js" install ffmpeg \
+    > "$evidence_dir/browser-preflight-ffmpeg-install.log" 2>&1; then
+    die_with_log "browser-preflight FFmpeg installation" "$evidence_dir/browser-preflight-ffmpeg-install.log"
+  fi
+
+  export PLAYWRIGHT_BROWSERS_PATH="$preflight_ffmpeg_root"
+  run_evidence_browser_smoke \
+    "$preflight_helper_path" \
+    "$preflight_runtime_root" \
+    "$preflight_output_root" \
+    "$evidence_dir/browser-preflight-smoke.log"
+  unset PLAYWRIGHT_BROWSERS_PATH
+
+  echo "ARES-7 browser compatibility preflight passed. No Azure command was executed."
+  echo "Run the same verified script again with no ARES7_MODE value to perform the guarded live scenario."
+  exit 0
+fi
+
+[[ "$runner_mode" == "live" ]] || \
+  die "Internal runner-mode guard failed before Azure CLI access."
+
 node -e 'if (typeof WebSocket !== "function") process.exit(1)' || \
   die "This Node.js build does not provide the WebSocket client required for live capture."
 
@@ -415,55 +660,33 @@ git diff --quiet && git diff --cached --quiet || \
 git show --no-patch --format='commit=%H%nauthorDate=%aI%nsubject=%s' HEAD \
   > "$evidence_dir/repository-commit.txt"
 
-echo "Installing locked dependencies and running the complete local verification suite."
+echo "Installing the locked root dependencies before the browser compatibility gate."
 npm ci --silent > "$evidence_dir/npm-root-install.log" 2>&1
+
+echo "Inflating and smoke-testing the pinned rootless Chromium runtime before Azure deployment writes."
+readonly full_browser_runtime_root="$run_root/browser-runtime"
+readonly full_browser_smoke_root="$evidence_dir/browser-smoke"
+readonly full_browser_ffmpeg_root="$run_root/playwright-browsers"
+mkdir -p "$full_browser_runtime_root" "$full_browser_smoke_root" "$full_browser_ffmpeg_root"
+chmod 700 "$full_browser_runtime_root" "$full_browser_smoke_root" "$full_browser_ffmpeg_root"
+
+if ! PLAYWRIGHT_BROWSERS_PATH="$full_browser_ffmpeg_root" \
+  node node_modules/playwright-core-ares7/cli.js install ffmpeg \
+  > "$evidence_dir/playwright-ffmpeg-install.log" 2>&1; then
+  die_with_log "pinned Playwright FFmpeg installation" "$evidence_dir/playwright-ffmpeg-install.log"
+fi
+export PLAYWRIGHT_BROWSERS_PATH="$full_browser_ffmpeg_root"
+run_evidence_browser_smoke \
+  "$run_root/repository/scripts/azure/evidence-browser-runtime.mjs" \
+  "$full_browser_runtime_root" \
+  "$full_browser_smoke_root" \
+  "$evidence_dir/playwright-browser-smoke.log"
+unset PLAYWRIGHT_BROWSERS_PATH
+
+echo "Installing the remaining locked dependencies and running the complete local verification suite."
 npm --prefix simulator ci --silent > "$evidence_dir/npm-simulator-install.log" 2>&1
 npm --prefix functions ci --silent > "$evidence_dir/npm-functions-install.log" 2>&1
 npm run verify > "$evidence_dir/local-verification.log" 2>&1
-
-echo "Installing and smoke-testing the pinned headless Chromium build before Azure deployment writes."
-npx playwright install chromium --only-shell \
-  > "$evidence_dir/playwright-browser-install.log" 2>&1
-node --input-type=module - "$run_root/playwright-smoke" \
-  > "$evidence_dir/playwright-browser-smoke.log" 2>&1 <<'NODE'
-import { mkdir, stat } from "node:fs/promises";
-import { resolve } from "node:path";
-import { chromium } from "@playwright/test";
-
-const output = process.argv[2];
-await mkdir(output, { recursive: true });
-const browser = await chromium.launch({ headless: true });
-try {
-  const context = await browser.newContext({
-    viewport: { width: 640, height: 360 },
-    recordVideo: { dir: output, size: { width: 640, height: 360 } },
-  });
-  const page = await context.newPage();
-  const video = page.video();
-  await page.setContent('<canvas id="gl" width="640" height="360"></canvas>');
-  const webglAvailable = await page.evaluate(() => {
-    const canvas = document.querySelector("#gl");
-    return Boolean(canvas?.getContext("webgl2") || canvas?.getContext("webgl"));
-  });
-  if (!webglAvailable) throw new Error("headless Chromium did not provide WebGL");
-  await page.screenshot({ path: resolve(output, "smoke.png") });
-  await page.waitForTimeout(750);
-  await page.close();
-  await context.close();
-  if (!video) throw new Error("Playwright did not create a video artifact");
-  const videoPath = await video.path();
-  const [screenshotStat, videoStat] = await Promise.all([
-    stat(resolve(output, "smoke.png")),
-    stat(videoPath),
-  ]);
-  if (screenshotStat.size < 1_000 || videoStat.size < 1_000) {
-    throw new Error("Playwright smoke artifacts were unexpectedly empty");
-  }
-  console.log("Chromium launch, WebGL, screenshot, and video smoke passed");
-} finally {
-  await browser.close();
-}
-NODE
 
 if [[ "$scene_operator_role_status" == "narrow-role-required" ]]; then
   echo "Assigning the signed-in operator narrow Entra access to the private 3D Scenes container."
@@ -765,6 +988,8 @@ PY
 
 export ARES7_LIVE_NEGOTIATE_URL="$live_negotiate_url"
 export ARES7_BROWSER_EVIDENCE_DIR="$evidence_dir/browser"
+export ARES7_BROWSER_RUNTIME_DIR="$full_browser_runtime_root"
+export PLAYWRIGHT_BROWSERS_PATH="$full_browser_ffmpeg_root"
 node scripts/capture-live-browser-evidence.mjs \
   > "$evidence_dir/live-browser-capture.log" 2>&1 &
 browser_pid=$!
@@ -1116,7 +1341,7 @@ viewer_pid=""
 
 wait "$browser_pid"
 browser_pid=""
-unset ARES7_LIVE_NEGOTIATE_URL ARES7_BROWSER_EVIDENCE_DIR
+unset ARES7_LIVE_NEGOTIATE_URL ARES7_BROWSER_EVIDENCE_DIR ARES7_BROWSER_RUNTIME_DIR PLAYWRIGHT_BROWSERS_PATH
 
 python3 - "$evidence_dir/browser" <<'PY' || \
   die "The browser screenshots or video failed binary integrity and dimension checks."
@@ -1141,6 +1366,19 @@ video = root / "azure-live-browser-session.webm"
 video_bytes = video.read_bytes()
 if len(video_bytes) < 100_000 or video_bytes[:4] != b"\x1a\x45\xdf\xa3":
     raise SystemExit(1)
+video_decode = json.loads((root / "browser-video-decode.json").read_text())
+encoder = video_decode.get("encoder") or {}
+if not (
+    video_decode.get("status") == "decoded-with-pinned-ffmpeg"
+    and video_decode.get("videoBytes") == len(video_bytes)
+    and isinstance(video_decode.get("decodedFrameBytes"), int)
+    and video_decode.get("decodedFrameBytes") >= 512
+    and encoder.get("revision") == "1011"
+    and encoder.get("bytes") == 5_101_056
+    and encoder.get("sha256")
+        == "460d44f3416005662f528d4b92e7b94ace924e8a0288106d3803b73c56eaadc8"
+):
+    raise SystemExit(1)
 
 result = {
     "status": "validated",
@@ -1151,6 +1389,7 @@ result = {
         "bytes": len(video_bytes),
         "containerSignature": "webm-ebml",
     },
+    "videoDecode": video_decode,
 }
 (root / "browser-media-validation.json").write_text(json.dumps(result, indent=2) + "\n")
 PY
@@ -1507,6 +1746,7 @@ viewer = load("live-viewer-messages.json")
 viewer_endpoints = load("live-viewer-endpoints.json")
 browser_state = load("browser/browser-state.json")
 browser_media = load("browser/browser-media-validation.json")
+browser_decode = load("browser/browser-video-decode.json")
 snapshots = load("snapshots.json")
 models = load("digital-twin-models.json")
 devices = load("device-identities.json")
@@ -1654,6 +1894,15 @@ checks = {
         and viewer_endpoints.get("captureMode")
             == "local-pinned-dist-under-intercepted-pages-origin"
         and browser_media.get("status") == "validated"
+        and browser_decode.get("status") == "decoded-with-pinned-ffmpeg"
+        and browser_decode.get("videoBytes")
+            == (browser_media.get("video") or {}).get("bytes")
+        and isinstance(browser_decode.get("decodedFrameBytes"), int)
+        and browser_decode.get("decodedFrameBytes") >= 512
+        and (browser_decode.get("encoder") or {}).get("revision") == "1011"
+        and (browser_decode.get("encoder") or {}).get("bytes") == 5_101_056
+        and (browser_decode.get("encoder") or {}).get("sha256")
+            == "460d44f3416005662f528d4b92e7b94ace924e8a0288106d3803b73c56eaadc8"
         and (root / "browser/azure-live-first-update.png").is_file()
         and (root / "browser/azure-live-final-resolved.png").is_file()
         and bool(browser_video_relative)
@@ -1738,6 +1987,8 @@ summary = {
         "captureMode": viewer_endpoints.get("captureMode"),
         "state": browser_state,
         "mediaValidation": browser_media,
+        "videoDecodeValidation": browser_decode,
+        "videoDecodeEvidence": "browser/browser-video-decode.json",
         "firstUpdateScreenshot": "browser/azure-live-first-update.png",
         "finalResolvedScreenshot": "browser/azure-live-final-resolved.png",
         "video": browser_video_relative,
