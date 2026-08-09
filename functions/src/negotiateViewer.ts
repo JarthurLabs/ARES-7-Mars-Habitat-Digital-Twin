@@ -59,7 +59,8 @@ export function createNegotiateViewer(dependencies: Dependencies) {
       jsonBody: {
         url: grant.url,
         expiresAt: new Date(dependencies.now() + TOKEN_LIFETIME_MINUTES * 60_000).toISOString(),
-        permissions: "receive-only",
+        accessMode: "read-only-ui",
+        roles: [],
       },
     };
   };

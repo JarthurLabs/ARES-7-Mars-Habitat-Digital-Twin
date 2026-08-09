@@ -1,6 +1,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildFrame, payloadHashFor, SCENARIO_TICKS } from "../src/scenario.mjs";
+import {
+  APPROVAL_GATE_TICK,
+  buildFrame,
+  delayAfterTickSeconds,
+  payloadHashFor,
+  scenarioTickRange,
+  SCENARIO_TICKS,
+} from "../src/scenario.mjs";
 
 const runId = "00000000-0000-4000-8000-000000000007";
 const sample = "2026-07-31T00:00:00.000Z";
@@ -40,4 +47,20 @@ test("raw telemetry never assumes an unapproved controller action", () => {
   assert.ok(resolved.power.batteryChargePct >= 70);
   assert.ok(resolved.lifeSupport.oxygenReservePct >= 95);
   assert.ok(resolved.environment.solarIrradiancePct >= 75);
+});
+
+test("the live runner can hold tick four for approval without slowing every frame", () => {
+  assert.equal(APPROVAL_GATE_TICK, 4);
+  assert.equal(delayAfterTickSeconds(3, 20, 60), 20);
+  assert.equal(delayAfterTickSeconds(4, 20, 60), 60);
+  assert.equal(delayAfterTickSeconds(5, 20, 60), 20);
+});
+
+test("the simulator can select a deterministic contiguous tick range", () => {
+  assert.deepEqual(scenarioTickRange(), [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
+  assert.deepEqual(scenarioTickRange(0, 0), [0]);
+  assert.deepEqual(scenarioTickRange(1, 11), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
+  assert.throws(() => scenarioTickRange(2, 1), /must not exceed/);
+  assert.throws(() => scenarioTickRange(-1, 1), /start tick/);
+  assert.throws(() => scenarioTickRange(1, 12), /end tick/);
 });

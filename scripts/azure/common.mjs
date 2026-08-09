@@ -3,6 +3,7 @@ import { fileURLToPath } from "node:url";
 
 export const repositoryRoot = fileURLToPath(new URL("../../", import.meta.url));
 export const expectedResourceGroup = "rg-ares7-lab-eus2";
+export const expectedDeviceId = "ares7-simulator";
 
 function required(env, name) {
   const value = env[name]?.trim();
@@ -64,12 +65,18 @@ export function validateScope(env, mode = "read") {
   return { resourceGroup, subscriptionId };
 }
 
+export function requireExactConfirmation(env, name, expected) {
+  if (env[name] !== expected) {
+    throw new Error(`${name} must equal ${expected}`);
+  }
+}
+
 export function run(command, args, options = {}) {
   const result = spawnSync(command, args, {
     cwd: options.cwd ?? repositoryRoot,
     encoding: "utf8",
     stdio: options.capture ? "pipe" : "inherit",
-    env: process.env,
+    env: { ...process.env, ...(options.env ?? {}) },
   });
   if (result.error) throw result.error;
   if (result.status !== 0) {
@@ -81,9 +88,50 @@ export function run(command, args, options = {}) {
   return options.capture ? result.stdout.trim() : "";
 }
 
-export function assertAzureAccount(scope) {
-  const actual = run(
+export function runAzure(scope, args, options = {}) {
+  if (args.includes("--subscription")) {
+    throw new Error("runAzure owns the exact --subscription argument");
+  }
+  return run(
     "az",
+    [...args, "--subscription", scope.subscriptionId],
+    options,
+  );
+}
+
+export function runAzureJson(scope, args) {
+  const output = runAzure(scope, [...args, "--output", "json"], {
+    capture: true,
+  });
+  try {
+    return JSON.parse(output);
+  } catch {
+    throw new Error(`Azure CLI returned non-JSON output for az ${args.join(" ")}`);
+  }
+}
+
+export function findSingleResourceName(scope, resourceType, namePrefix) {
+  const names = runAzureJson(scope, [
+    "resource",
+    "list",
+    "--resource-group",
+    scope.resourceGroup,
+    "--resource-type",
+    resourceType,
+    "--query",
+    `[?starts_with(name, '${namePrefix}')].name`,
+  ]);
+  if (!Array.isArray(names) || names.length !== 1) {
+    throw new Error(
+      `expected exactly one ${resourceType} named ${namePrefix}*, found ${Array.isArray(names) ? names.length : "invalid output"}`,
+    );
+  }
+  return names[0];
+}
+
+export function assertAzureAccount(scope) {
+  const actual = runAzure(
+    scope,
     ["account", "show", "--query", "id", "--output", "tsv"],
     {
       capture: true,

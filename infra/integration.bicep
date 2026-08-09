@@ -21,6 +21,12 @@ param environment string = 'development'
 ])
 param enableEventWiring bool = false
 
+@description('Exact browser Origin allowed to request a short-lived viewer grant with no group publish or join roles.')
+@allowed([
+  'https://jarthurlabs.github.io'
+])
+param viewerAllowedOrigins string = 'https://jarthurlabs.github.io'
+
 var suffix = uniqueString(subscription().subscriptionId, resourceGroup().id)
 var baseName = '${toLower(namePrefix)}-${suffix}'
 var deploymentContainerName = 'function-packages'
@@ -34,6 +40,7 @@ var tags = {
 }
 
 var storageBlobDataContributorRoleId = 'ba92f5b4-2d11-453d-a403-e96b0029c9fe'
+var storageBlobDataOwnerRoleId = 'b7e6dc6d-f1e8-4753-8033-0f276bb0955b'
 var storageQueueDataContributorRoleId = '974c5e8b-45b9-4653-ba55-5f855dd0fb88'
 var storageTableDataContributorRoleId = '0a9a7e1f-b9d0-4cc4-a60d-0319b160aaa3'
 var monitoringMetricsPublisherRoleId = '3913510d-42f4-4e42-8a64-420c390055eb'
@@ -206,16 +213,18 @@ resource functionApp 'Microsoft.Web/sites@2024-04-01' = {
       APPLICATIONINSIGHTS_AUTHENTICATION_STRING: 'ClientId=${functionIdentity.properties.clientId};Authorization=AAD'
       AZURE_CLIENT_ID: functionIdentity.properties.clientId
       AZURE_DIGITAL_TWINS_ENDPOINT: 'https://${digitalTwins.properties.hostName}'
-      WEB_PUBSUB_SERVICE_CLIENT_ENDPOINT: 'https://${webPubSub.properties.hostName}'
+      AZURE_WEBPUBSUB_ENDPOINT: 'https://${webPubSub.properties.hostName}'
+      AZURE_WEBPUBSUB_HUB: 'ares7'
+      VIEWER_ALLOWED_ORIGINS: viewerAllowedOrigins
     }
   }
 }
 
 resource functionBlobRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(storage.id, functionIdentity.id, storageBlobDataContributorRoleId)
+  name: guid(storage.id, functionIdentity.id, storageBlobDataOwnerRoleId)
   scope: storage
   properties: {
-    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', storageBlobDataContributorRoleId)
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', storageBlobDataOwnerRoleId)
     principalId: functionIdentity.properties.principalId
     principalType: 'ServicePrincipal'
   }

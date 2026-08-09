@@ -16,6 +16,22 @@ const FRAMES = [
 ];
 
 export const SCENARIO_TICKS = FRAMES.length;
+export const APPROVAL_GATE_TICK = 4;
+
+export function scenarioTickRange(startTick = 0, endTick = SCENARIO_TICKS - 1) {
+  if (!Number.isInteger(startTick) || startTick < 0 || startTick >= SCENARIO_TICKS) {
+    throw new RangeError(`start tick must be an integer from 0 to ${SCENARIO_TICKS - 1}`);
+  }
+  if (!Number.isInteger(endTick) || endTick < 0 || endTick >= SCENARIO_TICKS) {
+    throw new RangeError(`end tick must be an integer from 0 to ${SCENARIO_TICKS - 1}`);
+  }
+  if (startTick > endTick) throw new RangeError("start tick must not exceed end tick");
+  return Array.from({ length: endTick - startTick + 1 }, (_, index) => startTick + index);
+}
+
+export function delayAfterTickSeconds(tick, intervalSeconds, approvalGateDelaySeconds) {
+  return tick === APPROVAL_GATE_TICK ? approvalGateDelaySeconds : intervalSeconds;
+}
 
 function canonicalJson(value) {
   if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;

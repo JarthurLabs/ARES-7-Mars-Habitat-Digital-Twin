@@ -75,8 +75,8 @@ function seed(): TwinRecord[] {
       priorityMode: false,
       lastActionId: "none",
     }),
-    twin("ares7-module-command", { ...stamp }),
-    twin("ares7-module-crew", { ...stamp }),
+    twin("ares7-module-command", { ...stamp, powerDemandKw: 8 }),
+    twin("ares7-module-crew", { ...stamp, powerDemandKw: 9 }),
     twin("ares7-module-lab", {
       ...stamp,
       operationalState: "NOMINAL",
@@ -139,6 +139,11 @@ function telemetry(tick: number): AggregateTelemetry {
       allocatedPowerKw: 13,
     },
   };
+  return { ...hashable, payloadHash: payloadHashFor(hashable) };
+}
+
+function withSampleUtc(frame: AggregateTelemetry, sampleUtc: string): AggregateTelemetry {
+  const { payloadHash: _payloadHash, ...hashable } = { ...frame, sampleUtc };
   return { ...hashable, payloadHash: payloadHashFor(hashable) };
 }
 
@@ -235,11 +240,40 @@ describe("controller Function orchestration", () => {
         payloadHash: telemetry(2).payloadHash,
       },
     });
-    expect(broadcaster.messages.map((message) => message.state)).toEqual([
+    expect(broadcaster.messages.map((message) => message.controllerState)).toEqual([
       "STORM_WARNING",
       "POWER_CRITICAL",
       "LIFE_SUPPORT_RISK",
     ]);
+    expect(broadcaster.messages.at(-1)).toMatchObject({
+      source: "azure-live",
+      scenarioRunId: runId,
+      tick: 2,
+      snapshotVersion: `v2:${runId}:tick:2`,
+      controllerState: "LIFE_SUPPORT_RISK",
+      telemetry: {
+        missionSecond: 24,
+        phase: "degraded",
+        solarOutputKw: 8,
+        solarOutputPercent: 8,
+        batteryPercent: 50,
+        oxygenPercent: 20.1,
+        oxygenGeneratorOutputPercent: 40,
+        oxygenReservePercent: 80,
+        habitatPressureKpa: 99.8,
+        co2Ppm: 930,
+        dustOpacityPercent: 91,
+        commsLatencyMs: 180,
+        externalTemperatureC: -48,
+        crewLoadKw: 17,
+        lifeSupportLoadKw: 13,
+        nonessentialLoadKw: 13,
+        airlockSealed: false,
+        greenhouseIsolated: false,
+        loadSheddingActive: false,
+        emergencyBusActive: false,
+      },
+    });
   });
 
   it("rejects a clock that names the wrong immutable snapshot", async () => {
@@ -262,6 +296,58 @@ describe("controller Function orchestration", () => {
     const snapshot = await store.getTwin(id);
     if (!snapshot) throw new Error("missing snapshot");
     await store.updateTwin(id, { solarOutputPct: 99 }, { ifMatch: snapshot.etag });
+    await expect(emergencyControllerWithPorts(event("ares7-clock"), store)).rejects.toThrow(
+      "payloadHash does not match",
+    );
+  });
+
+  it.each([
+    ["all millisecond zeros", "2026-08-09T10:09:22.000Z", "2026-08-09T10:09:22Z"],
+    ["two millisecond zeros", "2026-08-09T10:09:22.900Z", "2026-08-09T10:09:22.9Z"],
+    ["one millisecond zero", "2026-08-09T10:09:22.940Z", "2026-08-09T10:09:22.94Z"],
+  ])("restores %s trimmed by Azure Digital Twins before verifying the original hash", async (_label, canonical, readback) => {
+    const store = new InMemoryTwinStore(seed());
+    const frame = withSampleUtc(telemetry(0), canonical);
+    await ingestTelemetryWithPorts(frame, store);
+    const id = snapshotTwinId(runId, 0);
+    const snapshot = await store.getTwin(id);
+    if (!snapshot) throw new Error("missing snapshot");
+    await store.updateTwin(id, { sampleUtc: readback }, { ifMatch: snapshot.etag });
+
+    await expect(emergencyControllerWithPorts(event("ares7-clock"), store)).resolves.toMatchObject({
+      status: "processed",
+    });
+    await expect(store.getTwin("ares7-habitat")).resolves.toMatchObject({
+      properties: { payloadHash: frame.payloadHash },
+    });
+  });
+
+  it.each([
+    "2026-08-09T10:09:22.9400Z",
+    "2026-08-09T10:09:22.94+00:00",
+    "2026-02-30T10:09:22.94Z",
+    "not-a-date",
+  ])("rejects an invalid snapshot readback sampleUtc: %s", async (sampleUtc) => {
+    const store = new InMemoryTwinStore(seed());
+    await ingestTelemetryWithPorts(withSampleUtc(telemetry(0), "2026-08-09T10:09:22.940Z"), store);
+    const id = snapshotTwinId(runId, 0);
+    const snapshot = await store.getTwin(id);
+    if (!snapshot) throw new Error("missing snapshot");
+    await store.updateTwin(id, { sampleUtc }, { ifMatch: snapshot.etag });
+
+    await expect(emergencyControllerWithPorts(event("ares7-clock"), store)).rejects.toThrow(
+      /sampleUtc|valid date/,
+    );
+  });
+
+  it("does not let readback normalization conceal a timestamp hash mismatch", async () => {
+    const store = new InMemoryTwinStore(seed());
+    await ingestTelemetryWithPorts(withSampleUtc(telemetry(0), "2026-08-09T10:09:22.940Z"), store);
+    const id = snapshotTwinId(runId, 0);
+    const snapshot = await store.getTwin(id);
+    if (!snapshot) throw new Error("missing snapshot");
+    await store.updateTwin(id, { sampleUtc: "2026-08-09T10:09:22.95Z" }, { ifMatch: snapshot.etag });
+
     await expect(emergencyControllerWithPorts(event("ares7-clock"), store)).rejects.toThrow(
       "payloadHash does not match",
     );

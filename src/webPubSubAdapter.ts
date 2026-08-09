@@ -13,11 +13,18 @@ export interface LiveViewerSnapshot {
 interface NegotiateResponse {
   url: string;
   expiresAt: string;
-  permissions: "receive-only";
+  accessMode: "read-only-ui";
+  roles: readonly [];
 }
 
 export interface ReadOnlyLiveConnection {
   close: () => void;
+}
+
+export interface ConnectionRetryOptions {
+  readonly negotiateAttempts?: number;
+  readonly retryDelayMs?: number;
+  readonly requestTimeoutMs?: number;
 }
 
 const controllerStates: readonly ControllerState[] = [
@@ -96,8 +103,13 @@ function parseNegotiateResponse(value: unknown): NegotiateResponse {
   if (!isRecord(value) || typeof value.url !== "string" || !value.url.startsWith("wss://")) {
     throw new Error("The negotiate endpoint returned an invalid client URL");
   }
-  if (typeof value.expiresAt !== "string" || value.permissions !== "receive-only") {
-    throw new Error("The negotiate endpoint did not return a receive-only grant");
+  if (
+    typeof value.expiresAt !== "string" ||
+    value.accessMode !== "read-only-ui" ||
+    !Array.isArray(value.roles) ||
+    value.roles.length !== 0
+  ) {
+    throw new Error("The negotiate endpoint did not return the read-only UI contract");
   }
   return value as unknown as NegotiateResponse;
 }
@@ -108,24 +120,93 @@ export async function connectReadOnlyLiveViewer(
   onStatus: (status: "connected" | "disconnected" | "error") => void,
   fetcher: typeof fetch = fetch,
   createSocket: (url: string) => WebSocket = (url) => new WebSocket(url, "json.webpubsub.azure.v1"),
+  retryOptions: ConnectionRetryOptions = {},
 ): Promise<ReadOnlyLiveConnection> {
   if (!negotiateUrl.startsWith("https://")) throw new Error("Live negotiate URL must use HTTPS");
-  const response = await fetcher(negotiateUrl, { method: "GET", credentials: "omit", mode: "cors" });
-  if (!response.ok) throw new Error(`Live negotiation failed (${response.status})`);
-  const grant = parseNegotiateResponse(await response.json());
-  const socket = createSocket(grant.url);
-  socket.addEventListener("open", () => onStatus("connected"));
-  socket.addEventListener("close", () => onStatus("disconnected"));
-  socket.addEventListener("error", () => onStatus("error"));
-  socket.addEventListener("message", (event) => {
-    try {
-      const envelope = JSON.parse(String(event.data)) as unknown;
-      if (!isRecord(envelope) || envelope.type !== "message" || envelope.from !== "server") return;
-      const payload = envelope.dataType === "json" ? envelope.data : JSON.parse(String(envelope.data));
-      onSnapshot(parseLiveViewerSnapshot(payload));
-    } catch {
-      onStatus("error");
+  const negotiateAttempts = retryOptions.negotiateAttempts ?? 6;
+  const retryDelayMs = retryOptions.retryDelayMs ?? 1_000;
+  const requestTimeoutMs = retryOptions.requestTimeoutMs ?? 15_000;
+  if (!Number.isInteger(negotiateAttempts) || negotiateAttempts < 1) {
+    throw new Error("Live negotiate attempts must be a positive integer");
+  }
+
+  let socket: WebSocket | undefined;
+  let closedByViewer = false;
+  let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
+  const delay = () => new Promise<void>((resolve) => setTimeout(resolve, retryDelayMs));
+
+  const negotiate = async (): Promise<NegotiateResponse> => {
+    let lastFailure: unknown;
+    for (let attempt = 1; attempt <= negotiateAttempts; attempt += 1) {
+      let response: Response;
+      try {
+        response = await fetcher(negotiateUrl, {
+          method: "GET",
+          credentials: "omit",
+          mode: "cors",
+          signal: AbortSignal.timeout(requestTimeoutMs),
+        });
+      } catch (error) {
+        lastFailure = error;
+        if (attempt < negotiateAttempts) await delay();
+        continue;
+      }
+      if (!response.ok) {
+        lastFailure = new Error(`Live negotiation failed (${response.status})`);
+        if (attempt < negotiateAttempts) await delay();
+        continue;
+      }
+      // A successful HTTP response with a malformed or over-privileged grant is
+      // a contract violation, not a transient condition. Fail it closed once.
+      return parseNegotiateResponse(await response.json());
     }
-  });
-  return { close: () => socket.close(1000, "viewer closed") };
+    throw lastFailure instanceof Error ? lastFailure : new Error("Live negotiation failed");
+  };
+
+  const establish = async (): Promise<void> => {
+    const grant = await negotiate();
+    if (closedByViewer) return;
+    const current = createSocket(grant.url);
+    socket = current;
+    current.addEventListener("message", (event) => {
+      try {
+        const envelope = JSON.parse(String(event.data)) as unknown;
+        if (isRecord(envelope) && envelope.type === "system" && envelope.event === "connected") {
+          onStatus("connected");
+          return;
+        }
+        if (!isRecord(envelope) || envelope.type !== "message" || envelope.from !== "server") return;
+        const payload = envelope.dataType === "json" ? envelope.data : JSON.parse(String(envelope.data));
+        onSnapshot(parseLiveViewerSnapshot(payload));
+      } catch {
+        onStatus("error");
+      }
+    });
+    current.addEventListener("error", () => {
+      onStatus("error");
+      try {
+        current.close(1011, "viewer reconnect");
+      } catch {
+        // The close handler or retry timer will recover the connection.
+      }
+    });
+    current.addEventListener("close", () => {
+      if (closedByViewer || current !== socket) return;
+      onStatus("disconnected");
+      reconnectTimer = setTimeout(() => {
+        void establish().catch(() => {
+          if (!closedByViewer) onStatus("error");
+        });
+      }, retryDelayMs);
+    });
+  };
+
+  await establish();
+  return {
+    close: () => {
+      closedByViewer = true;
+      clearTimeout(reconnectTimer);
+      socket?.close(1000, "viewer closed");
+    },
+  };
 }

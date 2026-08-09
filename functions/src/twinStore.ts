@@ -54,6 +54,51 @@ function copy(record: MutableTwin): TwinRecord {
   };
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function hasOwn(record: Record<string, unknown>, key: string): boolean {
+  return Object.prototype.hasOwnProperty.call(record, key);
+}
+
+function mapAzureTwinResponse(id: string, value: unknown): TwinRecord {
+  if (!isRecord(value)) {
+    throw new Error(`Digital twin ${id} returned a non-object response`);
+  }
+
+  // Version 2 of @azure/digital-twins-core merges the response body and headers
+  // into one object. Keep accepting the body-wrapped shape used by older
+  // adapters so deployments can be upgraded without changing the store contract.
+  const isFlatResponse = ["$dtId", "$etag", "$metadata"].some((key) => hasOwn(value, key));
+  const body = isFlatResponse ? value : value.body;
+  if (!isRecord(body)) {
+    throw new Error(`Digital twin ${id} response did not contain a twin object`);
+  }
+
+  if (!isRecord(body.$metadata)) {
+    throw new Error(`Digital twin ${id} response did not contain object metadata`);
+  }
+  const modelId = body.$metadata.$model;
+  if (typeof modelId !== "string" || modelId.length === 0) {
+    throw new Error(`Digital twin ${id} response did not contain a model identifier`);
+  }
+
+  if (body.$dtId !== undefined && body.$dtId !== id) {
+    throw new Error(`Digital twin ${id} response contained a mismatched twin identifier`);
+  }
+
+  const etag = body.$etag ?? value.etag;
+  if (typeof etag !== "string" || etag.length === 0) {
+    throw new Error(`Digital twin ${id} response did not contain an ETag`);
+  }
+
+  const properties = Object.fromEntries(
+    Object.entries(body).filter(([key]) => !key.startsWith("$") && !(isFlatResponse && key === "etag")),
+  );
+  return { id, modelId, properties, etag };
+}
+
 export class InMemoryTwinStore implements TwinStore {
   readonly #twins = new Map<string, MutableTwin>();
   readonly #rules: Array<FailureRule & { seen: number }>;
@@ -124,15 +169,7 @@ export class AzureDigitalTwinStore implements TwinStore {
   async getTwin(id: string): Promise<TwinRecord | undefined> {
     try {
       const response = await this.client.getDigitalTwin(id);
-      const body = response.body as Record<string, unknown>;
-      const metadata = body.$metadata as Record<string, unknown> | undefined;
-      const properties = Object.fromEntries(Object.entries(body).filter(([key]) => !key.startsWith("$")));
-      return {
-        id,
-        modelId: typeof metadata?.$model === "string" ? metadata.$model : undefined,
-        properties,
-        etag: String(body.$etag ?? response.etag ?? ""),
-      };
+      return mapAzureTwinResponse(id, response);
     } catch (error) {
       if ((error as { statusCode?: number }).statusCode === 404) return undefined;
       throw error;

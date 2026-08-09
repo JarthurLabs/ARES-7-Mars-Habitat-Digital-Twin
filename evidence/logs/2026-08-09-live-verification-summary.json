@@ -1,0 +1,33 @@
+{
+  "evidenceType": "redacted-live-verification-summary",
+  "verifiedAt": "2026-08-09T11:00:58.529Z",
+  "repositoryCommit": "bfd8445f720e55ac1b0304cb813c4f5e207f489c",
+  "resourceGroup": "rg-ares7-lab-eus2",
+  "scenarioRunId": "968227e6-2830-4212-835e-18eb29f5d1da",
+  "telemetry": {
+    "orderedTicks": "0-11",
+    "deviceSends": 13,
+    "distinctSnapshots": 12,
+    "exactDuplicateTick": 11
+  },
+  "approvalGate": {
+    "tick": 4,
+    "beforeDecision": "LIFE_SUPPORT_RISK/PENDING",
+    "afterDecision": "CONTAINMENT/APPROVED",
+    "reconciledBeforeTelemetryResumed": true
+  },
+  "finalHabitat": {
+    "lastProcessedTick": 11,
+    "state": "RESOLVED",
+    "operatorDecision": "APPROVED",
+    "controllerAction": "MONITOR_POST_INCIDENT"
+  },
+  "verifier": {
+    "status": "verified-live-complete",
+    "failures": []
+  },
+  "notes": [
+    "This file contains no credentials, tenant ID, subscription ID, or personal identifier.",
+    "The portfolio video is a deterministic viewer replay; it is not presented as a recording of this Azure run."
+  ]
+}

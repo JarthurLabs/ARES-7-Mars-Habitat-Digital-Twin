@@ -2,14 +2,14 @@ import {
   assertAzureAccount,
   expectedResourceGroup,
   handleFailure,
-  run,
+  runAzure,
   validateScope,
 } from "./common.mjs";
 
 try {
   const scope = validateScope(process.env, "cleanup");
   assertAzureAccount(scope);
-  run("az", [
+  runAzure(scope, [
     "group",
     "show",
     "--name",
@@ -17,9 +17,9 @@ try {
     "--output",
     "table",
   ]);
-  run("az", ["group", "delete", "--name", expectedResourceGroup, "--yes"]);
-  const exists = run(
-    "az",
+  runAzure(scope, ["group", "delete", "--name", expectedResourceGroup, "--yes"]);
+  const exists = runAzure(
+    scope,
     ["group", "exists", "--name", expectedResourceGroup],
     { capture: true },
   );

@@ -149,6 +149,7 @@ describe("versioned telemetry ingest", () => {
     ["a negative tick", (frame: AggregateTelemetry) => ({ ...frame, tick: -1 })],
     ["a mismatched snapshot version", (frame: AggregateTelemetry) => ({ ...frame, snapshotVersion: "v2:nope:tick:0" })],
     ["a non-UTC sample time", (frame: AggregateTelemetry) => ({ ...frame, sampleUtc: "2026-08-02T09:00:00+07:00" })],
+    ["a readback-normalized sample time", (frame: AggregateTelemetry) => ({ ...frame, sampleUtc: "2026-08-02T02:00:00Z" })],
   ])("rejects telemetry with %s", async (_label, change) => {
     await expect(
       ingestTelemetryWithPorts(change(telemetry()), new InMemoryTwinStore(seed())),

@@ -1,0 +1,421 @@
+{
+  "$schema": "https://raw.githubusercontent.com/microsoft/iot-cardboard-js/main/schemas/3DScenesConfiguration/v1.0.0/3DScenesConfiguration.schema.json",
+  "configuration": {
+    "scenes": [
+      {
+        "id": "470ee0119717acc1991675139d4dbda8",
+        "displayName": "ARES-7 Mars Habitat",
+        "description": "Segmented habitat view mapped to the ARES-7 Azure Digital Twins graph.",
+        "assets": [
+          {
+            "type": "3DAsset",
+            "url": "https://stares7j6vhj3eh4zuie.blob.core.windows.net/ares7-3d-scenes/ares7-habitat-segmented.glb"
+          }
+        ],
+        "elements": [
+          {
+            "type": "TwinToObjectMapping",
+            "id": "b2867e5e0563a4d7fab2da1ba0291493",
+            "displayName": "Mars surface environment",
+            "primaryTwinID": "ares7-environment",
+            "objectIDs": [
+              "ares7-environment"
+            ]
+          },
+          {
+            "type": "TwinToObjectMapping",
+            "id": "6f114d3d53937cd597be887d049e0f40",
+            "displayName": "ARES-7 habitat",
+            "primaryTwinID": "ares7-habitat",
+            "objectIDs": [
+              "ares7-habitat"
+            ]
+          },
+          {
+            "type": "TwinToObjectMapping",
+            "id": "7fa6d0ac97532a0992942a34e862ee98",
+            "displayName": "Command module",
+            "primaryTwinID": "ares7-module-command",
+            "objectIDs": [
+              "ares7-module-command"
+            ]
+          },
+          {
+            "type": "TwinToObjectMapping",
+            "id": "fbdb852655c6f7e1364bd8f60b1948e4",
+            "displayName": "Crew module",
+            "primaryTwinID": "ares7-module-crew",
+            "objectIDs": [
+              "ares7-module-crew"
+            ]
+          },
+          {
+            "type": "TwinToObjectMapping",
+            "id": "99287c6fcb1e1735604335c047583dbf",
+            "displayName": "Science lab",
+            "primaryTwinID": "ares7-module-lab",
+            "objectIDs": [
+              "ares7-module-lab"
+            ]
+          },
+          {
+            "type": "TwinToObjectMapping",
+            "id": "1dc7b083b921cfda66268e88cc2e317e",
+            "displayName": "Greenhouse",
+            "primaryTwinID": "ares7-module-greenhouse",
+            "objectIDs": [
+              "ares7-module-greenhouse"
+            ]
+          },
+          {
+            "type": "TwinToObjectMapping",
+            "id": "73391b30e019617e90253debba491053",
+            "displayName": "Life support",
+            "primaryTwinID": "ares7-life-support",
+            "objectIDs": [
+              "ares7-life-support"
+            ]
+          },
+          {
+            "type": "TwinToObjectMapping",
+            "id": "c97f4c7aab94c65cd35131b87f3ad749",
+            "displayName": "Main airlock",
+            "primaryTwinID": "ares7-airlock-main",
+            "objectIDs": [
+              "ares7-airlock-main"
+            ]
+          },
+          {
+            "type": "TwinToObjectMapping",
+            "id": "3999038d59f00b1ae26cb99641957b9b",
+            "displayName": "Battery Alpha",
+            "primaryTwinID": "ares7-battery-alpha",
+            "objectIDs": [
+              "ares7-battery-alpha"
+            ]
+          },
+          {
+            "type": "TwinToObjectMapping",
+            "id": "f1cb505930359123bf975527986c8103",
+            "displayName": "Solar Alpha",
+            "primaryTwinID": "ares7-solar-alpha",
+            "objectIDs": [
+              "ares7-solar-alpha"
+            ]
+          }
+        ],
+        "behaviorIDs": [
+          "904814a1ff838bf6eea4d9d152286042",
+          "b74d772b8def9fdce4c82c9c1a1f3471",
+          "d659d7f09876a8fa0431565f82b1be67",
+          "c5e39732171e53ef7644be252e565898"
+        ],
+        "pollingConfiguration": {
+          "minimumPollingFrequency": 12000
+        }
+      }
+    ],
+    "behaviors": [
+      {
+        "id": "904814a1ff838bf6eea4d9d152286042",
+        "displayName": "Habitat mission state",
+        "datasources": [
+          {
+            "type": "ElementTwinToObjectMappingDataSource",
+            "elementIDs": [
+              "6f114d3d53937cd597be887d049e0f40"
+            ]
+          }
+        ],
+        "visuals": [
+          {
+            "type": "ExpressionRangeVisual",
+            "id": "aa3597c756d3faf0784887e2d3426c34",
+            "displayName": "Mission state coloring",
+            "valueExpression": "PrimaryTwin.operationalState",
+            "expressionType": "CategoricalValues",
+            "valueRangeType": "string",
+            "valueRanges": [
+              {
+                "id": "eb4d2777c134a0369d8b3323d902ed98",
+                "values": [
+                  "NOMINAL",
+                  "RESOLVED"
+                ],
+                "visual": {
+                  "color": "#26C485",
+                  "labelExpression": "Nominal or resolved"
+                }
+              },
+              {
+                "id": "89145cd5e6c20448d58eb62c6296ec20",
+                "values": [
+                  "STORM_WARNING"
+                ],
+                "visual": {
+                  "color": "#F5A623",
+                  "iconName": "Warning",
+                  "labelExpression": "Storm warning"
+                }
+              },
+              {
+                "id": "53dca9d53db5cad143bd4bbe1dfb86c5",
+                "values": [
+                  "POWER_CRITICAL",
+                  "LIFE_SUPPORT_RISK"
+                ],
+                "visual": {
+                  "color": "#C32F27",
+                    "iconName": "Warning",
+                  "labelExpression": "Critical mission state"
+                }
+              },
+              {
+                "id": "a4bd008cb5a7af8b3fa5b91d5237c85a",
+                "values": [
+                  "CONTAINMENT"
+                ],
+                "visual": {
+                  "color": "#8B5CF6",
+                  "labelExpression": "Containment active"
+                }
+              },
+              {
+                "id": "22b6efbed372bbc3f8fe3b0608564b22",
+                "values": [
+                  "RECOVERY",
+                  "RESTORATION"
+                ],
+                "visual": {
+                  "color": "#33A1FD",
+                  "labelExpression": "Recovery or restoration"
+                }
+              }
+            ],
+            "objectIDs": {
+              "expression": "objectIDs"
+            }
+          },
+          {
+            "type": "Popover",
+            "title": "Habitat mission state",
+            "widgets": [
+              {
+                "type": "Value",
+                "id": "f191386fe4e41ea0f3dc2806aa4d7787",
+                "widgetConfiguration": {
+                  "displayName": "Operational state",
+                  "valueExpression": "PrimaryTwin.operationalState",
+                  "type": "string"
+                }
+              },
+              {
+                "type": "Value",
+                "id": "1319217ec51104578388e56a0276a8b1",
+                "widgetConfiguration": {
+                  "displayName": "Alarm level",
+                  "valueExpression": "PrimaryTwin.alarmLevel",
+                  "type": "string"
+                }
+              },
+              {
+                "type": "Value",
+                "id": "01ae39dc171a97ddd6741b6144080dc1",
+                "widgetConfiguration": {
+                  "displayName": "Operator decision",
+                  "valueExpression": "PrimaryTwin.operatorDecision",
+                  "type": "string"
+                }
+              },
+              {
+                "type": "Value",
+                "id": "c228b2ad5a2b16be5bb228989ce6a445",
+                "widgetConfiguration": {
+                  "displayName": "Controller action",
+                  "valueExpression": "PrimaryTwin.controllerAction",
+                  "type": "string"
+                }
+              }
+            ],
+            "objectIDs": {
+              "expression": "objectIDs"
+            }
+          }
+        ]
+      },
+      {
+        "id": "b74d772b8def9fdce4c82c9c1a1f3471",
+        "displayName": "Power and life-support health",
+        "datasources": [
+          {
+            "type": "ElementTwinToObjectMappingDataSource",
+            "elementIDs": [
+              "f1cb505930359123bf975527986c8103",
+              "3999038d59f00b1ae26cb99641957b9b",
+              "73391b30e019617e90253debba491053"
+            ]
+          }
+        ],
+        "visuals": [
+          {
+            "type": "ExpressionRangeVisual",
+            "id": "5ba5e9bc778fb29f9b9a4e5499b83e55",
+            "displayName": "Subsystem health coloring",
+            "valueExpression": "PrimaryTwin.status",
+            "expressionType": "CategoricalValues",
+            "valueRangeType": "string",
+            "valueRanges": [
+              {
+                "id": "d95453936d3f3af23bf9f7e63da0a425",
+                "values": [
+                  "NOMINAL"
+                ],
+                "visual": {
+                  "color": "#26C485",
+                  "labelExpression": "Nominal"
+                }
+              },
+              {
+                "id": "f0cd507821db33c30d814ef0933c0890",
+                "values": [
+                  "DEGRADED"
+                ],
+                "visual": {
+                  "color": "#F5A623",
+                  "iconName": "Warning",
+                  "labelExpression": "Degraded"
+                }
+              },
+              {
+                "id": "16b1e2537ea116bcae25a8931d906114",
+                "values": [
+                  "CRITICAL",
+                  "AT_RISK"
+                ],
+                "visual": {
+                  "color": "#C32F27",
+                    "iconName": "Warning",
+                  "labelExpression": "Critical or at risk"
+                }
+              }
+            ],
+            "objectIDs": {
+              "expression": "objectIDs"
+            }
+          }
+        ]
+      },
+      {
+        "id": "d659d7f09876a8fa0431565f82b1be67",
+        "displayName": "Module isolation",
+        "datasources": [
+          {
+            "type": "ElementTwinToObjectMappingDataSource",
+            "elementIDs": [
+              "7fa6d0ac97532a0992942a34e862ee98",
+              "fbdb852655c6f7e1364bd8f60b1948e4",
+              "99287c6fcb1e1735604335c047583dbf",
+              "1dc7b083b921cfda66268e88cc2e317e"
+            ]
+          }
+        ],
+        "visuals": [
+          {
+            "type": "ExpressionRangeVisual",
+            "id": "d78cf4913ed59306e91a7910c145ca89",
+            "displayName": "Isolation coloring",
+            "valueExpression": "PrimaryTwin.isolated",
+            "expressionType": "CategoricalValues",
+            "valueRangeType": "boolean",
+            "valueRanges": [
+              {
+                "id": "d3cbc89f398bfaf70ab469635190558b",
+                "values": [
+                  false
+                ],
+                "visual": {
+                  "color": "#D7E0E5",
+                  "labelExpression": "Connected"
+                }
+              },
+              {
+                "id": "e1687c0c0e648c40b463d4540a6c0d0b",
+                "values": [
+                  true
+                ],
+                "visual": {
+                  "color": "#F97316",
+                    "iconName": "Warning",
+                  "labelExpression": "Isolated"
+                }
+              }
+            ],
+            "objectIDs": {
+              "expression": "objectIDs"
+            }
+          }
+        ]
+      },
+      {
+        "id": "c5e39732171e53ef7644be252e565898",
+        "displayName": "Airlock seal",
+        "datasources": [
+          {
+            "type": "ElementTwinToObjectMappingDataSource",
+            "elementIDs": [
+              "c97f4c7aab94c65cd35131b87f3ad749"
+            ]
+          }
+        ],
+        "visuals": [
+          {
+            "type": "ExpressionRangeVisual",
+            "id": "4a7ed912b6cf510b109d77bb08aca0a2",
+            "displayName": "Seal coloring",
+            "valueExpression": "PrimaryTwin.sealed",
+            "expressionType": "CategoricalValues",
+            "valueRangeType": "boolean",
+            "valueRanges": [
+              {
+                "id": "17d768061efbd991488a51e30f87dd4b",
+                "values": [
+                  false
+                ],
+                "visual": {
+                  "color": "#D7E0E5",
+                  "labelExpression": "Ready"
+                }
+              },
+              {
+                "id": "4729c17b569d55ba0fed235f9c5a7463",
+                "values": [
+                  true
+                ],
+                "visual": {
+                  "color": "#F97316",
+                    "iconName": "Warning",
+                  "labelExpression": "Sealed for containment"
+                }
+              }
+            ],
+            "objectIDs": {
+              "expression": "objectIDs"
+            }
+          }
+        ]
+      }
+    ],
+    "layers": [
+      {
+        "id": "79c6eb4ffc37b4443e9c5bf8c52f4a2b",
+        "displayName": "Operations",
+        "behaviorIDs": [
+          "904814a1ff838bf6eea4d9d152286042",
+          "b74d772b8def9fdce4c82c9c1a1f3471",
+          "d659d7f09876a8fa0431565f82b1be67",
+          "c5e39732171e53ef7644be252e565898"
+        ]
+      }
+    ]
+  }
+}

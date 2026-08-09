@@ -102,8 +102,8 @@ flowchart LR
 The complete machine-readable definitions are in
 [`models/ares7-models.json`](../models/ares7-models.json) and
 [`models/twin-graph.json`](../models/twin-graph.json). Current readings are
-writable properties so they can be queried and used by a future 3D Scenes
-Studio behavior layer.
+writable properties used by the offline-generated 3D Scenes Studio behavior
+layer; loading and live rendering in Studio still require Azure UI proof.
 
 ## Coherent ticks
 
@@ -197,8 +197,9 @@ services are live; integration and end-to-end event evidence remain pending.
 - The local UI and Functions use one reducer, but their I/O adapters remain
   separate and the Azure adapter is not deployed yet.
 - The viewer does not consume Web PubSub or Azure Digital Twins yet.
-- The current 3D habitat is generated with Three.js rather than loaded from an
-  Azure 3D Scenes Studio GLB.
+- The browser viewer still generates its habitat with Three.js rather than
+  loading the separate 3D Scenes Studio GLB; Studio rendering is not yet
+  evidenced.
 - Recovery readings are scripted rather than produced by a feedback model.
 - There is no production observability, retry/dead-letter runbook, performance
   test, disaster recovery, or formal threat model.

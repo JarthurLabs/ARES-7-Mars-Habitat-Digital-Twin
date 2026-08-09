@@ -1,5 +1,10 @@
 import assert from "node:assert/strict";
-import { expectedResourceGroup, validateScope } from "./azure/common.mjs";
+import { readFileSync } from "node:fs";
+import {
+  expectedResourceGroup,
+  requireExactConfirmation,
+  validateScope,
+} from "./azure/common.mjs";
 
 const subscriptionId = "11111111-1111-4111-8111-111111111111";
 const base = {
@@ -43,6 +48,21 @@ assert.deepEqual(
   ),
   { resourceGroup: expectedResourceGroup, subscriptionId },
 );
+
+assert.doesNotThrow(() =>
+  requireExactConfirmation(
+    { ARES7_CONFIRM_EVENT_WIRING: `wire-${expectedResourceGroup}` },
+    "ARES7_CONFIRM_EVENT_WIRING",
+    `wire-${expectedResourceGroup}`,
+  ),
+);
+assert.throws(() =>
+  requireExactConfirmation(
+    { ARES7_CONFIRM_EVENT_WIRING: "yes" },
+    "ARES7_CONFIRM_EVENT_WIRING",
+    `wire-${expectedResourceGroup}`,
+  ),
+);
 assert.throws(() => validateScope(base, "cleanup"));
 assert.throws(() =>
   validateScope({ ...base, ARES7_MILESTONE: "cleanup" }, "cleanup"),
@@ -58,6 +78,10 @@ assert.deepEqual(
   ),
   { resourceGroup: expectedResourceGroup, subscriptionId },
 );
+
+const cleanupSource = readFileSync("scripts/azure/cleanup.mjs", "utf8");
+assert.match(cleanupSource, /runAzure\(scope, \["group", "delete"/);
+assert.doesNotMatch(cleanupSource, /run\("az", \["group", "delete"/);
 
 console.log(
   "validated exact resource-group, subscription, live-write, and cleanup guards",

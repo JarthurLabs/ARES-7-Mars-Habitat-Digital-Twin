@@ -4,17 +4,20 @@
 [![CodeQL](https://github.com/JarthurLabs/ARES-7-Mars-Habitat-Digital-Twin/actions/workflows/codeql.yml/badge.svg)](https://github.com/JarthurLabs/ARES-7-Mars-Habitat-Digital-Twin/actions/workflows/codeql.yml)
 [![Dependency review](https://github.com/JarthurLabs/ARES-7-Mars-Habitat-Digital-Twin/actions/workflows/dependency-review.yml/badge.svg)](https://github.com/JarthurLabs/ARES-7-Mars-Habitat-Digital-Twin/actions/workflows/dependency-review.yml)
 
-[Public replay target](https://jarthurlabs.github.io/ARES-7-Mars-Habitat-Digital-Twin/) — publication is waiting for GitHub Pages to be enabled with **GitHub Actions** as its source. The artifact is a deterministic static build and does not pretend to be live Azure data.
+[Public interactive replay](https://jarthurlabs.github.io/ARES-7-Mars-Habitat-Digital-Twin/) — published on GitHub Pages and verified reachable on August 9, 2026. It is intentionally labeled `LOCAL REPLAY`; it does not pretend to be a live Azure dashboard.
 
 ARES-7 is an Azure portfolio lab that turns a deterministic Martian
 dust storm into a traceable, human-approved containment sequence across a
 modeled habitat.
 
-![ARES-7 paused at the human approval gate](evidence/screenshots/ares7-human-approval-gate.png)
+## Watch the 90-second demo
 
-_The running local simulator at its approval boundary. The current capture
-shows the real model identifier and distinguishes six visible scene modules
-from the 11 entities defined for the twin graph._
+[![Watch the ARES-7 portfolio demo](https://github.com/user-attachments/assets/692d1b8e-dc34-43e9-b7e4-af7696a7dfb2)](https://github.com/user-attachments/assets/e3ad2ea0-0116-411b-8e50-cb7ef0673ba2)
+
+_Click the image to watch. The video uses the safe deterministic viewer replay
+so anyone can see the incident, human approval gate, containment, and recovery
+without Azure access. The Azure event path was verified separately in a live
+run described below._
 
 The interesting question is not whether a dashboard can turn red. It is
 whether an event-driven controller can act on a coherent snapshot, reject
@@ -27,9 +30,20 @@ decisions visible.
 - 11 digital-twin definitions and 15 relationship definitions.
 - 12 deterministic raw telemetry ticks.
 - One 8-state controller shared by the local replay and Functions.
-- 76 checks: 70 viewer/shared-core, simulator, and Function tests plus 6 browser tests.
+- Automated checks cover the viewer, shared controller, simulator, Functions,
+  infrastructure guards, models, and browser behavior.
 - One explicit human approval gate before containment.
 - IoT Hub `F1` and Web PubSub `Free_F1` enforced in Bicep.
+
+## Live Azure verification
+
+On August 9, 2026, commit
+[`bfd8445`](https://github.com/JarthurLabs/ARES-7-Mars-Habitat-Digital-Twin/commit/bfd8445f720e55ac1b0304cb813c4f5e207f489c)
+was deployed and verified through the real Azure event path. Run
+`968227e6-2830-4212-835e-18eb29f5d1da` processed ticks 0 through 11 plus one
+exact duplicate. It paused at tick 4 for human approval, reconciled that
+decision, then finished with 12 distinct snapshots and the final state
+`RESOLVED / APPROVED / MONITOR_POST_INCIDENT`.
 
 ## What happens during the drill
 
@@ -106,22 +120,23 @@ graph, and implementation status.
 
 | Component | Status | Evidence |
 |---|---|---|
-| Interactive Three.js habitat | Responsive local replay | Genuine 1600×900 and 390×844 captures plus browser tests |
+| Interactive Three.js habitat | Published replay | Public GitHub Pages viewer, portfolio video, responsive captures, and browser tests |
 | Local incident and approval UI | Working locally through the shared reducer | Viewer and local-adapter tests |
 | Deterministic telemetry simulator | Working locally | 12-frame NDJSON and 3 tests |
 | DTDL graph definition | Defined locally | 9 interfaces, 11 base twins, 15 relationships, and per-tick snapshots |
-| Ingest and controller Functions | Build and test locally | Shared-core plus handler integration and failure-injection tests |
+| Ingest and controller Functions | **Deployed and verified live** | Exact-commit deployment and completed Azure scenario run |
 | Core Bicep | Built, validated, reviewed with What-If, and deployed | Deployment `ares7-core-20260731` succeeded |
 | Azure resource group | Live and tagged | `rg-ares7-lab-eus2` |
 | Azure core services | **Deployed** | Digital Twins, IoT Hub F1, Web PubSub Free_F1, and Standard LRS Storage |
-| Azure event path | **Pending** | Functions, Event Grid, RBAC, graph upload, and device identity are not yet live |
-| Static public replay | Workflow ready; repository Pages setting still needs enabling | Validated `dist`-only workflow and artifact guard |
-| Web PubSub browser adapter | Optional and read-only | UI defaults to `LOCAL REPLAY`; live mode needs a short-lived receive-only negotiate URL |
-| Azure 3D Scenes Studio asset | Planned | Current scene is procedural Three.js |
+| Azure event path | **Verified live August 9, 2026** | 12 ordered snapshots, duplicate handling, approval gate, and resolved final state |
+| Static public replay | **Published and verified** | GitHub Pages returned the ARES-7 viewer on August 9, 2026 |
+| Web PubSub browser adapter | Optional read-only UI | UI defaults to `LOCAL REPLAY`; live mode uses a short-lived viewer URL with no group publish or join roles |
+| Azure 3D Scenes Studio bundle | Optional offline bundle validated | Studio rendering is not claimed and is not a completion requirement |
 
-The core deployment is genuine Azure state and is preserved in redacted CLI
-captures and a deployment record. It proves the resource and SKU boundary; it
-does not prove the still-pending telemetry and controller integration.
+The live run verified the complete cloud path: device telemetry, IoT Hub,
+event routing, Functions, Digital Twins, the approval boundary, duplicate
+handling, and final controller reconciliation. The public viewer remains a
+safe replay so reviewers never need Azure credentials.
 
 ## Run it locally
 
@@ -163,9 +178,9 @@ npm --prefix simulator run dry-run
 
 The current public-demo captures are [desktop with the twin inspector](evidence/screenshots/ares7-public-demo-desktop-20260805.png) and [mobile at 390×844](evidence/screenshots/ares7-public-demo-mobile-20260805.png). They were produced through the built application, not assembled in an image editor.
 
-The [evidence register](evidence/README.md) separates verified local behavior,
-verified Azure core infrastructure, and pending integration proof. An item is
-marked verified only when its corresponding artifact exists.
+The [evidence register](evidence/README.md) separates local behavior, Azure
+infrastructure, and live integration proof. An item is marked verified only
+when its corresponding evidence exists.
 
 ## Cost controls and cleanup
 
@@ -175,22 +190,23 @@ hard spending caps. The template excludes VMs, Kubernetes, Cosmos DB, Azure
 Data Explorer, private endpoints, and paid AI services.
 
 The exact cost boundary and resource-group deletion checklist are documented
-in [cost and cleanup](docs/cost-and-cleanup.md). The tagged resource group is
-scheduled for deletion within 72 hours of the final evidence capture.
+in [cost and cleanup](docs/cost-and-cleanup.md). The tagged resource group can
+be deleted as one unit after the final portfolio review.
 
 ## What this lab does not claim
 
 ARES-7 is a portfolio lab, not a production safety system. Its telemetry is
 synthetic and deterministic; it is not connected to spacecraft hardware. The
-current browser experience uses a local data adapter. The Azure core exists,
-but Functions deployment, Event Grid routes, RBAC assignments, data-plane
-models and twins, device provisioning, and live Web PubSub integration remain
-pending until their evidence is present.
+public browser experience and portfolio video use a local replay. The Azure
+event path was tested separately and does not turn the public demo into a live
+operations console.
 
 The lab template permits public service endpoints to keep the first deployment
 understandable and inexpensive. It has not undergone penetration, load,
 availability, or disaster-recovery testing. The procedural Three.js habitat is
-separate from a future Azure 3D Scenes Studio asset.
+separate from the generated Azure 3D Scenes Studio bundle. Offline schema and
+mapping validation does not prove that Studio has loaded the private blobs or
+rendered live twin behavior.
 
 ## Repository map
 

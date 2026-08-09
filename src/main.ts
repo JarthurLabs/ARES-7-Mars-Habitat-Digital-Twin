@@ -17,6 +17,7 @@ import {
 import { nominalTelemetry, snapshotAt, telemetryAt } from "./simulation";
 import { inspectTwin } from "./twinInspector";
 import { connectReadOnlyLiveViewer, type ReadOnlyLiveConnection } from "./webPubSubAdapter";
+import { negotiateOverrideFromSearch } from "./liveConfiguration";
 import type {
   MissionEvent,
   ModuleDefinition,
@@ -638,8 +639,17 @@ function setDataSource(label: string, state: "local" | "connecting" | "live" | "
 }
 
 async function initializeDataSource(): Promise<void> {
-  const wantsLive = new URLSearchParams(window.location.search).get("source") === "azure";
-  const negotiateUrl = import.meta.env.VITE_ARES7_NEGOTIATE_URL as string | undefined;
+  const parameters = new URLSearchParams(window.location.search);
+  let negotiateOverride: string | undefined;
+  try {
+    negotiateOverride = negotiateOverrideFromSearch(window.location.search);
+  } catch {
+    setDataSource("LOCAL REPLAY · INVALID LIVE URL", "error");
+    byId<HTMLElement>("mission-announcer").textContent = "The temporary Azure live endpoint was rejected. Continuing with local replay.";
+    return;
+  }
+  const wantsLive = parameters.get("source") === "azure" || negotiateOverride !== undefined;
+  const negotiateUrl = negotiateOverride ?? (import.meta.env.VITE_ARES7_NEGOTIATE_URL as string | undefined);
   if (!wantsLive) {
     setDataSource("LOCAL REPLAY", "local");
     return;
