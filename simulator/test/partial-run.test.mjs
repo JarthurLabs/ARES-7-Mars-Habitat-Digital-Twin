@@ -46,25 +46,37 @@ describe("partial scenario runs", () => {
     assert.equal(frames[0].scenarioRunId, runId);
   });
 
-  it("emits ticks one through eleven and preserves the exact tick-eleven duplicate", () => {
+  it("emits ticks one through four without crossing the approval boundary", () => {
     const result = runSimulator({
       ARES7_START_TICK: "1",
+      ARES7_END_TICK: "4",
+      ARES7_DUPLICATE_TICK: "",
+    });
+
+    assert.equal(result.status, 0, result.stderr);
+    const frames = emittedFrames(result);
+    assert.deepEqual(frames.map(({ tick }) => tick), [1, 2, 3, 4]);
+  });
+
+  it("emits only post-approval ticks and preserves the exact tick-eleven duplicate", () => {
+    const result = runSimulator({
+      ARES7_START_TICK: "5",
       ARES7_END_TICK: "11",
       ARES7_DUPLICATE_TICK: "11",
     });
 
     assert.equal(result.status, 0, result.stderr);
     const frames = emittedFrames(result);
-    assert.deepEqual(frames.map(({ tick }) => tick), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 11]);
+    assert.deepEqual(frames.map(({ tick }) => tick), [5, 6, 7, 8, 9, 10, 11, 11]);
     assert.deepEqual(frames.at(-1), frames.at(-2));
     assert.match(result.stdout, /resent exact duplicate tick=11/);
   });
 
   it("rejects a duplicate outside the selected range", () => {
     const result = runSimulator({
-      ARES7_START_TICK: "1",
+      ARES7_START_TICK: "5",
       ARES7_END_TICK: "11",
-      ARES7_DUPLICATE_TICK: "0",
+      ARES7_DUPLICATE_TICK: "4",
     });
 
     assert.equal(result.status, 1);

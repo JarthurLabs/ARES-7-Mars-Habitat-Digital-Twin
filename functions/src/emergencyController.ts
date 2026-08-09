@@ -62,6 +62,17 @@ function requireTwin(record: TwinRecord | undefined, id: string): TwinRecord {
   return record;
 }
 
+function canonicalSnapshotSampleUtc(value: unknown): unknown {
+  if (typeof value !== "string") return value;
+  const match = /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})(?:\.(\d{1,3}))?Z$/.exec(value);
+  if (!match) return value;
+
+  const canonical = `${match[1]}.${(match[2] ?? "").padEnd(3, "0")}Z`;
+  return !Number.isNaN(Date.parse(canonical)) && new Date(canonical).toISOString() === canonical
+    ? canonical
+    : value;
+}
+
 function snapshotTelemetry(record: TwinRecord, runId: string, tick: number): AggregateTelemetry {
   const properties = record.properties;
   if (record.modelId && record.modelId !== SNAPSHOT_MODEL) {
@@ -75,7 +86,10 @@ function snapshotTelemetry(record: TwinRecord, runId: string, tick: number): Agg
     snapshotVersion: properties.snapshotVersion,
     payloadHash: properties.payloadHash,
     simulatedMinute: properties.simulatedMinute,
-    sampleUtc: properties.sampleUtc,
+    // Azure Digital Twins serializes its DateTime value canonically but may trim
+    // trailing fractional zeros. Restore only that lossless readback form before
+    // applying the unchanged strict telemetry parser and original payload hash.
+    sampleUtc: canonicalSnapshotSampleUtc(properties.sampleUtc),
     environment: {
       stormIntensityPct: properties.stormIntensityPct,
       dustOpacityPct: properties.dustOpacityPct,
