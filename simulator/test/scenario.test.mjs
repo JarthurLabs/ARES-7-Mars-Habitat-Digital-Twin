@@ -5,6 +5,7 @@ import {
   buildFrame,
   delayAfterTickSeconds,
   payloadHashFor,
+  scenarioTickRange,
   SCENARIO_TICKS,
 } from "../src/scenario.mjs";
 
@@ -53,4 +54,13 @@ test("the live runner can hold tick four for approval without slowing every fram
   assert.equal(delayAfterTickSeconds(3, 20, 60), 20);
   assert.equal(delayAfterTickSeconds(4, 20, 60), 60);
   assert.equal(delayAfterTickSeconds(5, 20, 60), 20);
+});
+
+test("the simulator can select a deterministic contiguous tick range", () => {
+  assert.deepEqual(scenarioTickRange(), [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
+  assert.deepEqual(scenarioTickRange(0, 0), [0]);
+  assert.deepEqual(scenarioTickRange(1, 11), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
+  assert.throws(() => scenarioTickRange(2, 1), /must not exceed/);
+  assert.throws(() => scenarioTickRange(-1, 1), /start tick/);
+  assert.throws(() => scenarioTickRange(1, 12), /end tick/);
 });

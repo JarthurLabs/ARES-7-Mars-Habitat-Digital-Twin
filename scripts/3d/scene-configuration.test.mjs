@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { join } from "node:path";
 import { describe, it } from "node:test";
 import {
   buildAres7SceneConfiguration,
@@ -41,6 +43,35 @@ describe("ARES-7 3D Scenes configuration", () => {
         expectedStorageAccountName: EVIDENCED_STORAGE_ACCOUNT_NAME,
       }),
     );
+  });
+
+  it("keeps the storage account out of durable exporter logs", () => {
+    const storageAccountName = "stares7testaccount";
+    const temporaryDirectory = mkdtempSync(".tmp-scene-config-");
+    const output = join(temporaryDirectory, "3DScenesConfiguration.json");
+    try {
+      const stdout = execFileSync(
+        process.execPath,
+        ["scripts/3d/export-scene-configuration.mjs", "", output],
+        {
+          encoding: "utf8",
+          env: {
+            ...process.env,
+            ARES7_SCENE_STORAGE_ACCOUNT: storageAccountName,
+          },
+        },
+      );
+      assert.doesNotMatch(stdout, new RegExp(storageAccountName));
+      assert.doesNotMatch(stdout, /storageAccountName/);
+
+      const configuration = JSON.parse(readFileSync(output, "utf8"));
+      assert.match(
+        configuration.configuration.scenes[0].assets[0].url,
+        new RegExp(`https://${storageAccountName}\\.blob\\.core\\.windows\\.net/`),
+      );
+    } finally {
+      rmSync(temporaryDirectory, { recursive: true, force: true });
+    }
   });
 
   it("rejects a document that violates Microsoft's JSON Schema", () => {

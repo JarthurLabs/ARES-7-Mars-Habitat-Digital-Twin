@@ -2,7 +2,12 @@ import { randomUUID } from "node:crypto";
 import { setTimeout as wait } from "node:timers/promises";
 import iotDevice from "azure-iot-device";
 import mqttTransport from "azure-iot-device-mqtt";
-import { buildFrame, delayAfterTickSeconds, SCENARIO_TICKS } from "./scenario.mjs";
+import {
+  buildFrame,
+  delayAfterTickSeconds,
+  scenarioTickRange,
+  SCENARIO_TICKS,
+} from "./scenario.mjs";
 
 const { Client, Message } = iotDevice;
 const { Mqtt } = mqttTransport;
@@ -13,9 +18,12 @@ const intervalArgument = process.argv.indexOf("--interval");
 const intervalSeconds = intervalArgument >= 0
   ? Number(process.argv[intervalArgument + 1])
   : Number(process.env.ARES7_INTERVAL_SECONDS ?? 12);
-const duplicateTick = process.env.ARES7_DUPLICATE_TICK === undefined
+const duplicateTickValue = process.env.ARES7_DUPLICATE_TICK?.trim();
+const duplicateTick = !duplicateTickValue
   ? undefined
-  : Number(process.env.ARES7_DUPLICATE_TICK);
+  : Number(duplicateTickValue);
+const startTick = Number(process.env.ARES7_START_TICK ?? 0);
+const endTick = Number(process.env.ARES7_END_TICK ?? SCENARIO_TICKS - 1);
 const duplicateDelaySeconds = Number(
   process.env.ARES7_DUPLICATE_DELAY_SECONDS ?? intervalSeconds,
 );
@@ -31,6 +39,10 @@ if (
   (!Number.isInteger(duplicateTick) || duplicateTick < 0 || duplicateTick >= SCENARIO_TICKS)
 ) {
   throw new Error(`ARES7_DUPLICATE_TICK must be an integer from 0 to ${SCENARIO_TICKS - 1}.`);
+}
+const ticks = scenarioTickRange(startTick, endTick);
+if (duplicateTick !== undefined && !ticks.includes(duplicateTick)) {
+  throw new Error("ARES7_DUPLICATE_TICK must be inside the selected scenario tick range.");
 }
 if (!Number.isFinite(duplicateDelaySeconds) || duplicateDelaySeconds < 0) {
   throw new Error("ARES7_DUPLICATE_DELAY_SECONDS must be a non-negative number of seconds.");
@@ -68,20 +80,20 @@ async function sendFrame(frame) {
 }
 
 try {
-  const frames = [];
+  const frames = new Map();
   if (client) await client.open();
-  for (let tick = 0; tick < SCENARIO_TICKS; tick += 1) {
+  for (const [index, tick] of ticks.entries()) {
     const frame = buildFrame(tick, scenarioRunId, new Date().toISOString());
-    frames.push(frame);
+    frames.set(tick, frame);
     await sendFrame(frame);
     const delaySeconds = delayAfterTickSeconds(tick, intervalSeconds, approvalGateDelaySeconds);
-    if (tick < SCENARIO_TICKS - 1 && delaySeconds > 0) {
+    if (index < ticks.length - 1 && delaySeconds > 0) {
       await wait(delaySeconds * 1000);
     }
   }
   if (duplicateTick !== undefined) {
     if (duplicateDelaySeconds > 0) await wait(duplicateDelaySeconds * 1000);
-    await sendFrame(frames[duplicateTick]);
+    await sendFrame(frames.get(duplicateTick));
     process.stdout.write(
       `resent exact duplicate tick=${duplicateTick} scenarioRunId=${scenarioRunId}\n`,
     );

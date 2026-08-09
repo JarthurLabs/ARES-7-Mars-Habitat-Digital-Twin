@@ -36,8 +36,19 @@ for (const required of [
   "VIEWER_ALLOWED_ORIGINS",
   "https://jarthurlabs.github.io",
   "scope: storage",
+  "var storageBlobDataOwnerRoleId = 'b7e6dc6d-f1e8-4753-8033-0f276bb0955b'",
 ]) {
   if (!integration.includes(required)) throw new Error(`integration.bicep lost ${required}`);
+}
+
+const functionBlobRole = integration.match(
+  /resource functionBlobRole[\s\S]*?\n}\n\nresource functionQueueRole/,
+)?.[0];
+if (!functionBlobRole?.includes("storageBlobDataOwnerRoleId")) {
+  throw new Error("the Function host storage blob role must be Storage Blob Data Owner");
+}
+if (functionBlobRole.includes("storageBlobDataContributorRoleId")) {
+  throw new Error("the Function host storage blob role must not fall back to Storage Blob Data Contributor");
 }
 
 const guardedScripts = [

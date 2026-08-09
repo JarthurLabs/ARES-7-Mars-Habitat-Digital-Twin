@@ -309,7 +309,6 @@ if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1]
       {
         output: relative(repositoryRoot, output),
         schemaVersion: SCENES_SCHEMA_VERSION,
-        storageAccountName,
         scenes: configuration.configuration.scenes.length,
         elements: configuration.configuration.scenes[0].elements.length,
         behaviors: configuration.configuration.behaviors.length,

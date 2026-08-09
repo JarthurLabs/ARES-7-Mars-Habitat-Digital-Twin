@@ -29,6 +29,7 @@ const requiredIntegrationControls = [
   "function-packages",
   "managedidentity",
   "Authorization=AAD",
+  "b7e6dc6d-f1e8-4753-8033-0f276bb0955b",
   "bcd981a7-7f74-457b-83e1-cceb9e632ffe",
   "12cf5a90-567b-43ae-8102-96cf46c7d9b4",
 ];

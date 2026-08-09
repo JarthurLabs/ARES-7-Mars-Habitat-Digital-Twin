@@ -101,7 +101,7 @@ describe("Azure adapter wiring", () => {
 });
 
 describe("Azure Digital Twins store", () => {
-  it("maps an SDK twin into the store contract and filters metadata", async () => {
+  it("maps a body-wrapped SDK twin into the store contract and filters metadata", async () => {
     const client = digitalTwinsClient({
       getDigitalTwin: vi.fn().mockResolvedValue({
         body: {
@@ -119,6 +119,54 @@ describe("Azure Digital Twins store", () => {
       properties: { operationalState: "NOMINAL" },
       etag: '"7"',
     });
+  });
+
+  it("maps the flat response returned by the current SDK without leaking transport headers", async () => {
+    const client = digitalTwinsClient({
+      getDigitalTwin: vi.fn().mockResolvedValue({
+        etag: 'W/"8"',
+        $dtId: "ares7-habitat",
+        $etag: 'W/"8"',
+        $metadata: { $model: "dtmi:ares7:Habitat;1" },
+        operationalState: "LIFE_SUPPORT_RISK",
+      }),
+    });
+    const store = new AzureDigitalTwinStore(client as never);
+
+    await expect(store.getTwin("ares7-habitat")).resolves.toEqual({
+      id: "ares7-habitat",
+      modelId: "dtmi:ares7:Habitat;1",
+      properties: { operationalState: "LIFE_SUPPORT_RISK" },
+      etag: 'W/"8"',
+    });
+  });
+
+  it("rejects malformed SDK responses instead of weakening the twin contract", async () => {
+    const missingMetadata = new AzureDigitalTwinStore(
+      digitalTwinsClient({
+        getDigitalTwin: vi.fn().mockResolvedValue({
+          etag: 'W/"8"',
+          $dtId: "ares7-habitat",
+          operationalState: "NOMINAL",
+        }),
+      }) as never,
+    );
+    const mismatchedId = new AzureDigitalTwinStore(
+      digitalTwinsClient({
+        getDigitalTwin: vi.fn().mockResolvedValue({
+          etag: 'W/"8"',
+          $dtId: "another-twin",
+          $metadata: { $model: "dtmi:ares7:Habitat;1" },
+        }),
+      }) as never,
+    );
+
+    await expect(missingMetadata.getTwin("ares7-habitat")).rejects.toThrow(
+      "Digital twin ares7-habitat response did not contain object metadata",
+    );
+    await expect(mismatchedId.getTwin("ares7-habitat")).rejects.toThrow(
+      "Digital twin ares7-habitat response contained a mismatched twin identifier",
+    );
   });
 
   it("returns undefined only for a real 404", async () => {
