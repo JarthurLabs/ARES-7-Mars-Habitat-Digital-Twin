@@ -5,6 +5,7 @@ import {
   launchEvidenceBrowser,
   validateEvidenceWebm,
 } from "./azure/evidence-browser-runtime.mjs";
+import { isConnectedReadOnlyViewerReady } from "./live-browser-readiness.mjs";
 
 const repositoryRoot = fileURLToPath(new URL("../", import.meta.url));
 const distRoot = resolve(repositoryRoot, "dist");
@@ -107,8 +108,7 @@ try {
   });
 
   await page.goto(liveUrl.toString(), { waitUntil: "domcontentloaded" });
-  await page.locator("#data-source-label").filter({ hasText: "AZURE LIVE · READ ONLY" }).waitFor({
-    state: "visible",
+  await page.waitForFunction(isConnectedReadOnlyViewerReady, undefined, {
     timeout: 120_000,
   });
   await writeFile(
@@ -140,22 +140,48 @@ try {
     fullPage: true,
   });
 
-  const browserState = await page.evaluate(() => ({
-    dataSource: document.querySelector("#data-source-label")?.textContent,
-    scenarioRunId: document.querySelector("#run-id")?.textContent,
-    tick: document.querySelector("#run-tick")?.textContent,
-    snapshotVersion: document.querySelector("#snapshot-version")?.textContent,
-    controllerState: document.querySelector("#controller-state")?.textContent,
-  }));
-  if (browserState.snapshotVersion !== expectedFinalSnapshotVersion) {
+  const browserState = await page.evaluate(() => {
+    const dataSourceLabel = document.querySelector("#data-source-label");
+    const dataSourceRectangle = dataSourceLabel?.getBoundingClientRect();
+    return {
+      dataSource: dataSourceLabel?.textContent,
+      dataSourceState: document.querySelector("#connection-chip")?.getAttribute("data-source"),
+      dataSourceRendered: Boolean(
+        dataSourceRectangle &&
+        dataSourceRectangle.width > 0 &&
+        dataSourceRectangle.height > 0,
+      ),
+      scenarioRunId: document.querySelector("#run-id")?.textContent,
+      tick: document.querySelector("#run-tick")?.textContent,
+      snapshotVersion: document.querySelector("#snapshot-version")?.textContent,
+      controllerState: document.querySelector("#controller-state")?.textContent,
+    };
+  });
+  if (
+    browserState.snapshotVersion !== expectedFinalSnapshotVersion ||
+    browserState.dataSource !== "AZURE LIVE · READ ONLY" ||
+    browserState.dataSourceState !== "live" ||
+    browserState.dataSourceRendered !== true
+  ) {
     throw new Error(
-      `Browser ended on snapshot ${String(browserState.snapshotVersion)}, expected ${expectedFinalSnapshotVersion}`,
+      `Browser did not end on the exact rendered live read-only state and snapshot ${expectedFinalSnapshotVersion}`,
     );
   }
   await writeFile(
     resolve(evidenceRoot, "browser-state.json"),
     `${JSON.stringify({ ...browserState, accessMode: "read-only-ui", captureMode, browserProfile: browserRuntime.profile, browserVersion: browserRuntime.browserVersion, origin: pagesOrigin, capturedAtUtc: new Date().toISOString() }, null, 2)}\n`,
   );
+} catch (error) {
+  await writeFile(
+    resolve(evidenceRoot, "browser-fatal.json"),
+    `${JSON.stringify({
+      status: "failed",
+      name: error instanceof Error ? error.name : "Error",
+      message: error instanceof Error ? error.message : String(error),
+      failedAtUtc: new Date().toISOString(),
+    }, null, 2)}\n`,
+  );
+  throw error;
 } finally {
   try {
     await writeFile(

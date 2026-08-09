@@ -1,9 +1,22 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import {
+  chmod,
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { resolve } from "node:path";
 import test from "node:test";
 import {
   evidenceBrowserLaunchArguments,
+  prepareEvidenceFontConfiguration,
+  renderEvidenceFontConfig,
   requiredBundledLibraries,
+  requiredEvidenceFontFiles,
   validateEvidenceBrowserDependencies,
   validateEvidenceBrowserLaunchArguments,
   validateEvidenceBrowserVersion,
@@ -19,6 +32,19 @@ const resolvedInventory = [
   ),
   "/lib64/ld-linux-x86-64.so.2 (0x00007fff00000009)",
 ].join("\n");
+
+async function createFakeFontRuntime() {
+  const runtimeDirectory = await mkdtemp(resolve(tmpdir(), "ares7-font-runtime-test."));
+  await chmod(runtimeDirectory, 0o700);
+  const openSansDirectory = resolve(runtimeDirectory, "fonts/fonts/Open_Sans");
+  await mkdir(openSansDirectory, { recursive: true });
+  for (const name of requiredEvidenceFontFiles) {
+    await writeFile(resolve(openSansDirectory, name), `reviewed-test-font:${name}\n`, {
+      mode: 0o600,
+    });
+  }
+  return runtimeDirectory;
+}
 
 test("uses the exact rootless AL2023 browser library set", () => {
   assert.deepEqual(requiredBundledLibraries, [
@@ -111,6 +137,75 @@ test("keeps the evidence launch allowlist compatible and browser security enable
 test("requires the Chromium major aligned to the aliased Playwright core", () => {
   assert.equal(validateEvidenceBrowserVersion("149.0.7827.0"), "149.0.7827.0");
   assert.throws(() => validateEvidenceBrowserVersion("151.0.7922.34"), /major 149/);
+});
+
+test("renders a private absolute fontconfig without global fallback directories", () => {
+  const config = renderEvidenceFontConfig(
+    "/tmp/ares7 & private/fonts/fonts",
+    "/tmp/ares7 & private/font-cache",
+  );
+  assert.match(config, /<dir>\/tmp\/ares7 &amp; private\/fonts\/fonts<\/dir>/);
+  assert.match(config, /<cachedir>\/tmp\/ares7 &amp; private\/font-cache<\/cachedir>/);
+  assert.doesNotMatch(config, /<dir>\/tmp\/fonts<\/dir>|\/var\/task|\/opt\/fonts/);
+  assert.throws(
+    () => renderEvidenceFontConfig("relative/fonts", "/tmp/cache"),
+    /must be absolute/,
+  );
+});
+
+test("prepares the exact private fontconfig repeat-safely and rejects replacement", async () => {
+  const runtimeDirectory = await createFakeFontRuntime();
+  try {
+    const first = await prepareEvidenceFontConfiguration(runtimeDirectory);
+    const second = await prepareEvidenceFontConfiguration(runtimeDirectory);
+    assert.equal(second.configPath, first.configPath);
+    assert.deepEqual(second.fontFiles, [...requiredEvidenceFontFiles]);
+    const config = await readFile(first.configPath, "utf8");
+    assert.equal(
+      config,
+      renderEvidenceFontConfig(first.fontDirectory, first.cacheDirectory),
+    );
+
+    await writeFile(first.configPath, "<fontconfig/>\n");
+    await assert.rejects(
+      prepareEvidenceFontConfiguration(runtimeDirectory),
+      /does not match the reviewed content/,
+    );
+  } finally {
+    await rm(runtimeDirectory, { recursive: true, force: true });
+  }
+});
+
+test("rejects a symlinked private font configuration", async () => {
+  const runtimeDirectory = await createFakeFontRuntime();
+  try {
+    const prepared = await prepareEvidenceFontConfiguration(runtimeDirectory);
+    const alternate = resolve(runtimeDirectory, "alternate-fonts.conf");
+    await writeFile(alternate, "<fontconfig/>\n", { mode: 0o600 });
+    await rm(prepared.configPath);
+    await symlink(alternate, prepared.configPath);
+    await assert.rejects(
+      prepareEvidenceFontConfiguration(runtimeDirectory),
+      /runtime artifact is unsafe or incomplete/,
+    );
+  } finally {
+    await rm(runtimeDirectory, { recursive: true, force: true });
+  }
+});
+
+test("rejects a symlinked private font-cache directory", async () => {
+  const runtimeDirectory = await createFakeFontRuntime();
+  try {
+    const alternateCache = resolve(runtimeDirectory, "alternate-font-cache");
+    await mkdir(alternateCache, { mode: 0o700 });
+    await symlink(alternateCache, resolve(runtimeDirectory, "font-cache"));
+    await assert.rejects(
+      prepareEvidenceFontConfiguration(runtimeDirectory),
+      /private directory is unsafe/,
+    );
+  } finally {
+    await rm(runtimeDirectory, { recursive: true, force: true });
+  }
 });
 
 test("the live capture and lock use only the exact audited browser packages", async () => {

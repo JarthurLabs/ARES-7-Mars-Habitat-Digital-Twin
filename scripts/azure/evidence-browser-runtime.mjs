@@ -9,9 +9,10 @@ import {
   rename,
   rm,
   stat,
+  writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, resolve, sep } from "node:path";
+import { dirname, isAbsolute, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createHash } from "node:crypto";
 import { execFile } from "node:child_process";
@@ -53,6 +54,12 @@ export const requiredBundledLibraries = Object.freeze([
   "libplds4.so",
 ]);
 
+export const requiredEvidenceFontFiles = Object.freeze([
+  "OpenSans-Bold.ttf",
+  "OpenSans-Italic.ttf",
+  "OpenSans-Regular.ttf",
+]);
+
 const forbiddenLaunchArguments = Object.freeze([
   "--allow-running-insecure-content",
   "--disable-web-security",
@@ -69,6 +76,42 @@ function isPathWithin(parent, candidate) {
     normalizedCandidate === normalizedParent ||
     normalizedCandidate.startsWith(`${normalizedParent}${sep}`)
   );
+}
+
+function escapeXmlText(value) {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&apos;");
+}
+
+export function renderEvidenceFontConfig(fontDirectory, cacheDirectory) {
+  if (!isAbsolute(fontDirectory) || !isAbsolute(cacheDirectory)) {
+    throw new Error("Evidence font and cache directories must be absolute");
+  }
+  const fontPath = escapeXmlText(resolve(fontDirectory));
+  const cachePath = escapeXmlText(resolve(cacheDirectory));
+  return `<?xml version="1.0"?>
+<!DOCTYPE fontconfig SYSTEM "fonts.dtd">
+<fontconfig>
+  <dir>${fontPath}</dir>
+  <cachedir>${cachePath}</cachedir>
+  <alias>
+    <family>sans-serif</family>
+    <prefer><family>Open Sans</family></prefer>
+  </alias>
+  <alias>
+    <family>serif</family>
+    <prefer><family>Open Sans</family></prefer>
+  </alias>
+  <alias>
+    <family>monospace</family>
+    <prefer><family>Open Sans</family></prefer>
+  </alias>
+</fontconfig>
+`;
 }
 
 export function validateEvidenceBrowserLaunchArguments(
@@ -310,6 +353,26 @@ async function pathExists(path) {
   }
 }
 
+async function ensurePrivateRuntimeDirectory(directory, runtimeDirectory) {
+  try {
+    await mkdir(directory, { mode: 0o700 });
+  } catch (error) {
+    if (error?.code !== "EEXIST") throw error;
+  }
+  const directoryLstat = await lstat(directory);
+  const verifiedDirectory = await realpath(directory);
+  if (
+    directoryLstat.isSymbolicLink() ||
+    !directoryLstat.isDirectory() ||
+    directoryLstat.uid !== process.getuid() ||
+    (directoryLstat.mode & 0o077) !== 0 ||
+    !isPathWithin(runtimeDirectory, verifiedDirectory)
+  ) {
+    throw new Error(`The evidence browser private directory is unsafe: ${directory}`);
+  }
+  return verifiedDirectory;
+}
+
 async function verifyPrivateRuntimeArtifact(path, runtimeDirectory, minimumBytes = 1) {
   const artifactLstat = await lstat(path);
   const verifiedPath = await realpath(path);
@@ -354,6 +417,78 @@ async function verifyPrivateRuntimeTree(directory, runtimeDirectory) {
       throw new Error(`The evidence browser runtime contains an unsupported entry: ${entryPath}`);
     }
   }
+}
+
+export async function prepareEvidenceFontConfiguration(runtimeDirectory) {
+  const verifiedRuntimeDirectory = await realpath(runtimeDirectory);
+  const bundledFontsRoot = resolve(verifiedRuntimeDirectory, "fonts");
+  await verifyPrivateRuntimeTree(bundledFontsRoot, verifiedRuntimeDirectory);
+  const fontDirectory = await realpath(resolve(bundledFontsRoot, "fonts"));
+  const fontDirectoryEntries = await readdir(fontDirectory, { withFileTypes: true });
+  if (
+    fontDirectoryEntries.length !== 1 ||
+    fontDirectoryEntries[0].name !== "Open_Sans" ||
+    !fontDirectoryEntries[0].isDirectory()
+  ) {
+    throw new Error("The evidence font directory does not match the reviewed bundle");
+  }
+
+  const openSansDirectory = resolve(fontDirectory, "Open_Sans");
+  const openSansLstat = await lstat(openSansDirectory);
+  const verifiedOpenSansDirectory = await realpath(openSansDirectory);
+  if (
+    openSansLstat.isSymbolicLink() ||
+    !openSansLstat.isDirectory() ||
+    !isPathWithin(verifiedRuntimeDirectory, verifiedOpenSansDirectory)
+  ) {
+    throw new Error("The evidence Open Sans font directory is unsafe");
+  }
+  const fontEntries = (await readdir(verifiedOpenSansDirectory, { withFileTypes: true }))
+    .map((entry) => ({ name: entry.name, isFile: entry.isFile() }))
+    .sort((left, right) => left.name.localeCompare(right.name));
+  const expectedEntries = [...requiredEvidenceFontFiles]
+    .sort((left, right) => left.localeCompare(right))
+    .map((name) => ({ name, isFile: true }));
+  if (JSON.stringify(fontEntries) !== JSON.stringify(expectedEntries)) {
+    throw new Error("The evidence Open Sans font inventory does not match the reviewed bundle");
+  }
+  for (const font of requiredEvidenceFontFiles) {
+    await verifyPrivateRuntimeArtifact(
+      resolve(verifiedOpenSansDirectory, font),
+      verifiedRuntimeDirectory,
+    );
+  }
+
+  const cacheDirectory = await ensurePrivateRuntimeDirectory(
+    resolve(verifiedRuntimeDirectory, "font-cache"),
+    verifiedRuntimeDirectory,
+  );
+  const configDirectory = await ensurePrivateRuntimeDirectory(
+    resolve(verifiedRuntimeDirectory, "fontconfig"),
+    verifiedRuntimeDirectory,
+  );
+  const configPath = resolve(configDirectory, "fonts.conf");
+  const configText = renderEvidenceFontConfig(fontDirectory, cacheDirectory);
+  try {
+    await writeFile(configPath, configText, { flag: "wx", mode: 0o600 });
+  } catch (error) {
+    if (error?.code !== "EEXIST") throw error;
+  }
+  const verifiedConfig = await verifyPrivateRuntimeArtifact(
+    configPath,
+    verifiedRuntimeDirectory,
+  );
+  if ((await readFile(verifiedConfig.path, "utf8")) !== configText) {
+    throw new Error("The private evidence font configuration does not match the reviewed content");
+  }
+
+  return {
+    cacheDirectory,
+    configDirectory,
+    configPath: verifiedConfig.path,
+    fontDirectory,
+    fontFiles: [...requiredEvidenceFontFiles],
+  };
 }
 
 async function extractBrotliTar(source, destination) {
@@ -475,18 +610,6 @@ export async function prepareEvidenceBrowserRuntime(options = {}) {
   );
   const verifiedExecutablePath = executable.path;
 
-  const browserEnvironment = {
-    PATH: process.env.PATH,
-    LANG: process.env.LANG ?? "C.UTF-8",
-    LC_ALL: process.env.LC_ALL ?? "C.UTF-8",
-    TZ: process.env.TZ ?? "UTC",
-    HOME: resolve(verifiedRuntimeDirectory, "home"),
-    TMPDIR: verifiedRuntimeDirectory,
-    FONTCONFIG_PATH: resolve(verifiedRuntimeDirectory, "fonts"),
-    LD_LIBRARY_PATH: verifiedLibraryDirectory,
-  };
-  await mkdir(browserEnvironment.HOME, { recursive: true, mode: 0o700 });
-
   const executableStat = executable.stat;
   await verifyPrivateRuntimeTree(
     resolve(verifiedRuntimeDirectory, "fonts"),
@@ -509,6 +632,24 @@ export async function prepareEvidenceBrowserRuntime(options = {}) {
   ]) {
     await verifyPrivateRuntimeArtifact(artifact, verifiedRuntimeDirectory);
   }
+  const fontConfiguration = await prepareEvidenceFontConfiguration(
+    verifiedRuntimeDirectory,
+  );
+  const homeDirectory = await ensurePrivateRuntimeDirectory(
+    resolve(verifiedRuntimeDirectory, "home"),
+    verifiedRuntimeDirectory,
+  );
+  const browserEnvironment = {
+    PATH: process.env.PATH,
+    LANG: process.env.LANG ?? "C.UTF-8",
+    LC_ALL: process.env.LC_ALL ?? "C.UTF-8",
+    TZ: process.env.TZ ?? "UTC",
+    HOME: homeDirectory,
+    TMPDIR: verifiedRuntimeDirectory,
+    FONTCONFIG_FILE: fontConfiguration.configPath,
+    FONTCONFIG_PATH: fontConfiguration.configDirectory,
+    LD_LIBRARY_PATH: verifiedLibraryDirectory,
+  };
 
   let lddResult;
   try {
@@ -539,6 +680,10 @@ export async function prepareEvidenceBrowserRuntime(options = {}) {
     libraryDirectory: verifiedLibraryDirectory,
     browserEnvironment,
     dependencies,
+    fonts: {
+      status: "private-fontconfig-verified",
+      files: fontConfiguration.fontFiles,
+    },
     videoEncoder,
   };
 }
@@ -565,6 +710,7 @@ export async function launchEvidenceBrowser(options = {}) {
         executableSha256: runtime.executableSha256,
         launchArguments: runtime.launchArguments,
         dependencies: runtime.dependencies,
+        fonts: runtime.fonts,
         videoEncoder: runtime.videoEncoder,
       },
     };
