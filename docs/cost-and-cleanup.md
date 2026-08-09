@@ -7,16 +7,17 @@ tracking and cleanup.
 
 | Item | State |
 |---|---|
-| Resource group | `rg-ares7-lab-eus2` created and tagged |
-| Core services | Deployed by `ares7-core-20260731`; deployment succeeded |
-| Function App and Event Grid | Not deployed |
-| DTDL models and twin graph | Not uploaded |
+| Resource group | Deleted after the verified live run on August 9, 2026 |
+| Core services | Deployed, verified, then removed with the resource group |
+| Function App and Event Grid | Deployed for the verified run, then removed |
+| DTDL models and twin graph | Uploaded for the verified run, then removed |
 | Budget alert | Planned, not claimed as configured |
-| Public redacted Azure evidence | Verified resource, SKU, and deployment captures |
+| Public redacted Azure evidence | Live-run and zero-residue summaries verified |
 
-The resource group and four core services are genuine Azure state. They prove
-the cost-gated infrastructure boundary, not the graph, routes, controller, or
-end-to-end scenario.
+The Azure resources were genuine short-lived lab state. The named live run
+proved the graph, routes, controller, approval boundary, and duplicate
+handling. Cleanup then removed the exact resource group and left no tagged
+ARES-7 group or resource in the active subscription.
 
 ## Spending envelope
 
@@ -24,7 +25,7 @@ end-to-end scenario.
 - Planned secondary alert: **$25**.
 - Evidence window: keep services live only as long as validation requires.
 - Cleanup target: delete the lab resource group within **72 hours** of the final
-  evidence capture.
+  evidence capture. **Met on August 9, 2026.**
 
 Azure budget alerts can lag and do not stop resources. They are a warning, not
 a hard cap.
@@ -134,3 +135,11 @@ Finally:
 Deleting the resource group is destructive. Never substitute a broad path,
 subscription-wide query, wildcard, or unresolved environment variable for the
 explicit group name.
+
+## Cleanup result
+
+The guarded cleanup script from merge commit `cd6b052` deleted only
+`rg-ares7-lab-eus2`. It verified the group no longer existed. Two additional
+subscription-wide tag queries returned empty arrays for ARES-7-tagged groups
+and resources. The redacted machine-readable result is in
+[`evidence/logs/2026-08-09-azure-cleanup-summary.json`](../evidence/logs/2026-08-09-azure-cleanup-summary.json).

@@ -35,7 +35,7 @@ screenshot is never asked to prove more than it shows.
 | AZ-05 | Controller paused at tick 4, resumed after approval, handled a duplicate, and resolved at tick 11 | [`logs/2026-08-09-live-verification-summary.json`](logs/2026-08-09-live-verification-summary.json) | Verified Azure |
 | AZ-06 | Approval changed `LIFE_SUPPORT_RISK/PENDING` into reconciled containment before telemetry resumed | [`logs/2026-08-09-live-verification-summary.json`](logs/2026-08-09-live-verification-summary.json) | Verified Azure |
 | AZ-07 | Actual spend remains inside the envelope | Redacted Cost Analysis export | Pending |
-| AZ-08 | Lab resource group is removed | Post-cleanup `group exists=false` evidence | Pending |
+| AZ-08 | Lab resource group is removed and no ARES-7-tagged residue remains | [`logs/2026-08-09-azure-cleanup-summary.json`](logs/2026-08-09-azure-cleanup-summary.json) | Verified Azure cleanup |
 | AZ-09 | Private 3D Scenes bundle loads and responds to live ADT state in Studio | Studio Builder/Viewer capture, post-save configuration, blob digests, and no-anonymous-access setting | Pending |
 
 ## Local screenshot provenance
@@ -71,11 +71,11 @@ not open an IoT connection.
 
 ## Remaining optional or cleanup evidence
 
-The live event-path objective is complete. Actual delayed cost evidence remains
-optional. Azure 3D Scenes Studio rendering is not claimed and is not required
-for portfolio completion. Resource-group deletion remains pending until the
-owner explicitly approves cleanup; after deletion, preserve the negative
-existence check as `AZ-08`.
+The live event-path and resource cleanup objectives are complete. Actual
+delayed cost evidence remains optional. Azure 3D Scenes Studio rendering is
+not claimed and is not required for portfolio completion. `AZ-08` records the
+negative group-existence check and the empty subscription-wide ARES-7 tag
+queries.
 
 No pending row should be changed to verified from memory alone. Add the raw
 artifact first, then update the register and README claim.

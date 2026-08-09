@@ -1,0 +1,18 @@
+{
+  "evidenceType": "redacted-azure-cleanup-summary",
+  "verifiedAt": "2026-08-09T11:52:50Z",
+  "cleanupCodeCommit": "cd6b052d2c3c7789dd45220ee4e676f024d2df87",
+  "targetResourceGroup": "rg-ares7-lab-eus2",
+  "guardedCleanupResult": "verified deletion of rg-ares7-lab-eus2",
+  "independentVerification": {
+    "targetGroupExists": false,
+    "ares7TaggedGroups": [],
+    "ares7TaggedResources": []
+  },
+  "scope": "the active subscription used for the verified ARES-7 live run",
+  "redaction": {
+    "subscriptionIdIncluded": false,
+    "tenantIdIncluded": false,
+    "personalIdentifierIncluded": false
+  }
+}

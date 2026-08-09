@@ -45,6 +45,11 @@ exact duplicate. It paused at tick 4 for human approval, reconciled that
 decision, then finished with 12 distinct snapshots and the final state
 `RESOLVED / APPROVED / MONITOR_POST_INCIDENT`.
 
+After verification, the exact lab resource group was deleted. Independent
+subscription-wide checks returned `false` for group existence and no remaining
+ARES-7-tagged groups or resources. The public replay, video, code, and redacted
+evidence remain available without keeping Azure services running.
+
 ## What happens during the drill
 
 1. A deterministic simulator introduces rising dust opacity.
@@ -126,9 +131,9 @@ graph, and implementation status.
 | DTDL graph definition | Defined locally | 9 interfaces, 11 base twins, 15 relationships, and per-tick snapshots |
 | Ingest and controller Functions | **Deployed and verified live** | Exact-commit deployment and completed Azure scenario run |
 | Core Bicep | Built, validated, reviewed with What-If, and deployed | Deployment `ares7-core-20260731` succeeded |
-| Azure resource group | Live and tagged | `rg-ares7-lab-eus2` |
-| Azure core services | **Deployed** | Digital Twins, IoT Hub F1, Web PubSub Free_F1, and Standard LRS Storage |
-| Azure event path | **Verified live August 9, 2026** | 12 ordered snapshots, duplicate handling, approval gate, and resolved final state |
+| Azure resource group | **Deleted after verification** | `rg-ares7-lab-eus2` returned `false`; no ARES-7-tagged residue remained |
+| Azure core services | **Historical live deployment; removed** | Digital Twins, IoT Hub F1, Web PubSub Free_F1, Functions, Event Grid, identities, monitoring, and storage |
+| Azure event path | **Verified live August 9, 2026; resources removed** | 12 ordered snapshots, duplicate handling, approval gate, and resolved final state |
 | Static public replay | **Published and verified** | GitHub Pages returned the ARES-7 viewer on August 9, 2026 |
 | Web PubSub browser adapter | Optional read-only UI | UI defaults to `LOCAL REPLAY`; live mode uses a short-lived viewer URL with no group publish or join roles |
 | Azure 3D Scenes Studio bundle | Optional offline bundle validated | Studio rendering is not claimed and is not a completion requirement |
@@ -189,9 +194,10 @@ alert as a secondary warning. Budget alerts are delayed notifications, not
 hard spending caps. The template excludes VMs, Kubernetes, Cosmos DB, Azure
 Data Explorer, private endpoints, and paid AI services.
 
-The exact cost boundary and resource-group deletion checklist are documented
-in [cost and cleanup](docs/cost-and-cleanup.md). The tagged resource group can
-be deleted as one unit after the final portfolio review.
+The exact cost boundary and resource-group deletion record are documented in
+[cost and cleanup](docs/cost-and-cleanup.md). The tagged resource group was
+deleted after the final portfolio review, and subscription-wide tag checks
+found no ARES-7 residue.
 
 ## What this lab does not claim
 
