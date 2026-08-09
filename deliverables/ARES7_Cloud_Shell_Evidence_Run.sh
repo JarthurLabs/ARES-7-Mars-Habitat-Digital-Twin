@@ -4,11 +4,11 @@ set -euo pipefail
 readonly resource_group="rg-ares7-lab-eus2"
 readonly repository_url="https://github.com/JarthurLabs/ARES-7-Mars-Habitat-Digital-Twin.git"
 readonly repository_branch="agent/complete-ares-live-20260808"
-readonly fixed_live_commit="42d3762cd9f1b428e26fef47237c937fffe9819d"
+readonly fixed_live_commit="59b95ea279ba2d35ce36e08677c6f9301b9fd09f"
 readonly repository_commit="${ARES7_REPOSITORY_COMMIT:-$fixed_live_commit}"
 readonly evidence_browser_chromium_version="149.0.0"
 readonly evidence_browser_playwright_core_version="1.61.1"
-readonly evidence_browser_helper_sha256="fa2440bb19174412f337d0c053f9e996dd89252c5e018f951dd4fda60060174d"
+readonly evidence_browser_helper_sha256="c32a4083b3e69d95572047d4fa269a0c647de37fbd50940095783c0130c1e258"
 readonly evidence_browser_preflight_package_sha256="d51de9d1e12251d1b0cecfd78c05dc5accd39600d48bb1ce997174bc0f281a0e"
 readonly evidence_browser_preflight_lock_sha256="0a670c6f2984a15f893d5f7e67bd27698c329f603f0a143b704d30cd15f249a2"
 runner_mode="${ARES7_MODE:-live}"
@@ -129,12 +129,41 @@ try {
   });
   const page = await context.newPage();
   const video = page.video();
-  await page.setContent('<canvas id="gl" width="640" height="360"></canvas>');
-  const webglAvailable = await page.evaluate(() => {
+  await page.setContent(`
+    <style>
+      html, body { margin: 0; width: 640px; height: 360px; background: #081012; color: #e8fffa; }
+      #font-smoke { font: 600 24px "Open Sans", sans-serif; padding: 24px; }
+    </style>
+    <div id="font-smoke">ARES-7 ROOTLESS TEXT READY</div>
+    <canvas id="gl" width="640" height="280"></canvas>
+  `);
+  const { textRender, webglAvailable } = await page.evaluate(async () => {
+    await document.fonts.ready;
+    const text = document.querySelector("#font-smoke");
+    const rectangle = text?.getBoundingClientRect();
     const canvas = document.querySelector("#gl");
-    return Boolean(canvas?.getContext("webgl2") || canvas?.getContext("webgl"));
+    return {
+      textRender: {
+        fontReady: document.fonts.check(
+          '24px "Open Sans"',
+          text?.textContent ?? "",
+        ),
+        height: rectangle?.height ?? 0,
+        width: rectangle?.width ?? 0,
+      },
+      webglAvailable: Boolean(
+        canvas?.getContext("webgl2") || canvas?.getContext("webgl"),
+      ),
+    };
   });
   if (!webglAvailable) throw new Error("rootless evidence Chromium did not provide WebGL");
+  if (
+    !textRender.fontReady ||
+    textRender.width < 100 ||
+    textRender.height < 20
+  ) {
+    throw new Error("rootless evidence Chromium did not render the reviewed private font");
+  }
   const screenshotPath = resolve(outputPath, "smoke.png");
   await page.screenshot({ path: screenshotPath });
   await page.waitForTimeout(750);
@@ -159,6 +188,7 @@ try {
     `${JSON.stringify(
       {
         status: "passed",
+        textRender,
         webglAvailable,
         screenshotBytes: screenshotStat.size,
         videoBytes: videoStat.size,
@@ -171,7 +201,7 @@ try {
       2,
     )}\n`,
   );
-  console.log("Rootless Chromium launch, ldd, WebGL, screenshot, and WebM video smoke passed");
+  console.log("Rootless Chromium launch, ldd, private-font text, WebGL, screenshot, and WebM video smoke passed");
 } finally {
   await browser.close();
 }
@@ -1019,16 +1049,35 @@ node scripts/capture-live-browser-evidence.mjs \
 browser_pid=$!
 
 browser_ready="false"
-for _attempt in $(seq 1 240); do
+browser_failed="false"
+browser_exited="false"
+for _attempt in $(seq 1 360); do
   if [[ -s "$evidence_dir/browser/browser-ready.json" ]]; then
     browser_ready="true"
     break
   fi
-  kill -0 "$browser_pid" 2>/dev/null || break
+  if [[ -s "$evidence_dir/browser/browser-fatal.json" ]]; then
+    browser_failed="true"
+    break
+  fi
+  if ! kill -0 "$browser_pid" 2>/dev/null; then
+    browser_exited="true"
+    break
+  fi
   sleep 0.5
 done
+if [[ "$browser_failed" == "true" ]]; then
+  die_with_log \
+    "read-only portfolio viewer capture" \
+    "$evidence_dir/browser/browser-fatal.json"
+fi
+if [[ "$browser_exited" == "true" ]]; then
+  die_with_log \
+    "read-only portfolio viewer capture" \
+    "$evidence_dir/live-browser-capture.log"
+fi
 [[ "$browser_ready" == "true" ]] || \
-  die "The read-only portfolio viewer did not reach browser-ready state within 120 seconds."
+  die "The read-only portfolio viewer did not reach browser-ready state within 180 seconds."
 
 cat > "$run_root/live-viewer-listener.mjs" <<'NODE'
 import { writeFile } from "node:fs/promises";
