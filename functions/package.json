@@ -18,13 +18,13 @@
     "@ares7/controller-core": "file:../packages/controller-core",
     "@azure/digital-twins-core": "^2.0.0",
     "@azure/functions": "^4.16.2",
-    "@azure/identity": "^4.13.1",
+    "@azure/identity": "^4.13.2",
     "@azure/web-pubsub": "^1.2.0"
   },
   "devDependencies": {
-    "@types/node": "^26.1.2",
-    "@vitest/coverage-v8": "^4.1.10",
-    "esbuild": "^0.28.1",
+    "@types/node": "^26.2.0",
+    "@vitest/coverage-v8": "^4.1.11",
+    "esbuild": "^0.28.2",
     "typescript": "^7.0.2",
     "vitest": "^4.1.10"
   }
