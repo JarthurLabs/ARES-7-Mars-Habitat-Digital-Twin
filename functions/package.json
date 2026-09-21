@@ -17,15 +17,15 @@
   "dependencies": {
     "@ares7/controller-core": "file:../packages/controller-core",
     "@azure/digital-twins-core": "^2.0.0",
-    "@azure/functions": "^4.16.2",
-    "@azure/identity": "^4.13.1",
+    "@azure/functions": "^4.16.5",
+    "@azure/identity": "^4.13.3",
     "@azure/web-pubsub": "^1.2.0"
   },
   "devDependencies": {
-    "@types/node": "^26.1.2",
-    "@vitest/coverage-v8": "^4.1.10",
-    "esbuild": "^0.28.1",
+    "@types/node": "^26.6.1",
+    "@vitest/coverage-v8": "^5.0.1",
+    "esbuild": "^0.28.2",
     "typescript": "^7.0.2",
-    "vitest": "^4.1.10"
+    "vitest": "^5.0.1"
   }
 }
